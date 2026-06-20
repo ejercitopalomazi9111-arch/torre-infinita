@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Torre Infinita — Roguelike Pokémon</title>
+  <link rel="icon" href="data:," />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #05060a;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Press Start 2P', monospace;
+    }
+    #game {
+      image-rendering: pixelated;
+      box-shadow: 0 0 0 2px #1b2336, 0 12px 48px rgba(0,0,0,0.7);
+    }
+    canvas { image-rendering: pixelated; display: block; }
+  </style>
+  <script type="module" crossorigin src="./assets/index-aOC3-WNG.js"></script>
+</head>
+<body>
+  <div id="game"></div>
+</body>
+</html>
