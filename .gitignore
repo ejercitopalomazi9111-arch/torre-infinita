@@ -1,0 +1,6 @@
+node_modules/
+dist/
+_tmp/
+assets/_preview/
+*.log
+.DS_Store
