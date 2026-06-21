@@ -78,6 +78,7 @@ export class FloorScene extends Phaser.Scene {
     this.biking = false; this.bikeSprite = null;   // te bajas de la bici al cambiar de piso
     this.roamers = [];   // Pokémon corredores visibles (tocarlos = combate)
     this.holeTile = null; this.serviceTile = null;
+    this.giveUpExplore = false; this.exploreStall = 0; this.floorSteps = 0; this.exploreFails = 0; this._lastVisited = 0;   // MODO DIOS tester
   }
 
   create() {
@@ -162,6 +163,11 @@ export class FloorScene extends Phaser.Scene {
   buildRoom(roomId, fromDir) {
     this.currentRoomId = roomId;
     this.visited.add(roomId);
+    this.exploreStall = 0;   // entramos a una sala nueva → el bot tester no está atascado
+    if (this.registry.get('godtest') && typeof window !== 'undefined') {
+      (window.__godtrail = window.__godtrail || []).push(roomId);
+      if (window.__godtrail.length > 40) window.__godtrail.shift();
+    }
     const room = this.floor.roomById.get(roomId);
     const tm = generateRoomTiles(room, this.biome, this.floor.seed);
     this.tilemap = tm;
@@ -282,6 +288,7 @@ export class FloorScene extends Phaser.Scene {
       rest: '¿Una siesta para recuperar PS? Adelante.',
     };
     const safe = this.doorSafeTiles(room);
+    this._corridor = safe;   // corredores de puerta: ni edificios ni NPCs los bloquean
     const SERVICE_BLD = { shop: 'mart', pokecenter: 'center', rest: 'house_a' };
     const mid = (COLS / 2) | 0;
     if (['shop', 'pokecenter', 'rest'].includes(room.type)) {
@@ -315,6 +322,7 @@ export class FloorScene extends Phaser.Scene {
       const cell = this.tilemap.cells[r][c];
       if (cell.base !== 'floor' || cell.blocked) continue;
       if (Math.abs(c - 7) <= 1 && Math.abs(r - 5) <= 1) continue;   // no tapar el spawn
+      if (this._corridor?.has(c + ',' + r)) continue;               // no tapar corredores de puerta
       if (this.npcs.some(n => n.c === c && n.r === r)) continue;
       return { c, r };
     }
@@ -335,7 +343,9 @@ export class FloorScene extends Phaser.Scene {
     }
     sprite.setDepth(50 + pos.y);
     this.worldLayer.add(sprite);
-    if (this.tilemap?.cells?.[r]?.[c]) this.tilemap.cells[r][c].blocked = true;   // no atravesable
+    // bloquea el paso salvo en un corredor de puerta (ahí el NPC sigue ahí y se le
+    // habla, pero NO tapona el camino a la puerta → evita pueblos sin salida)
+    if (this.tilemap?.cells?.[r]?.[c] && !this._corridor?.has(c + ',' + r)) this.tilemap.cells[r][c].blocked = true;
     if (role) {
       const lbl = { shop: 'TIENDA', pokecenter: 'CENTRO', rest: 'POSADA' }[role] || '';
       const lt = this.add.text(pos.x, pos.y - 30, lbl, { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#ffd76a', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(70 + pos.y);
@@ -369,10 +379,24 @@ export class FloorScene extends Phaser.Scene {
 
   /** Casillas que NUNCA deben bloquearse (cada puerta + su corredor de entrada). */
   doorSafeTiles(room) {
-    const APPROACH = { N: [[7, 0], [7, 1], [7, 2]], S: [[7, ROWS - 1], [7, ROWS - 2], [7, ROWS - 3]],
-      W: [[0, 5], [1, 5], [2, 5]], E: [[COLS - 1, 5], [COLS - 2, 5], [COLS - 3, 5]] };
+    // Protege el CORREDOR COMPLETO de cada puerta hasta el centro (7,5): así toda
+    // puerta conecta con la cruz central y, por tanto, con las demás puertas. Antes
+    // solo se protegían 3 casillas y un edificio podía partir la sala dejando una
+    // puerta (¡a veces la de las escaleras!) inalcanzable → pueblo encajonado.
+    const cc = 7, cr = 5;   // centro lógico de la sala
     const set = new Set();
-    for (const d of (room.doors || [])) for (const [c, r] of (APPROACH[d.dir] || [])) set.add(c + ',' + r);
+    const line = (c0, r0, c1, r1) => {
+      const dc = Math.sign(c1 - c0), dr = Math.sign(r1 - r0);
+      let c = c0, r = r0;
+      set.add(c + ',' + r);
+      while (c !== c1 || r !== r1) { c += dc; r += dr; set.add(c + ',' + r); }
+    };
+    for (const d of (room.doors || [])) {
+      if (d.dir === 'N') line(cc, 0, cc, cr);
+      else if (d.dir === 'S') line(cc, ROWS - 1, cc, cr);
+      else if (d.dir === 'W') line(0, cr, cc, cr);
+      else if (d.dir === 'E') line(COLS - 1, cr, cc, cr);
+    }
     return set;
   }
 
@@ -795,7 +819,14 @@ export class FloorScene extends Phaser.Scene {
     // ---- IA AUTÓNOMA: si está activa, el bot conduce (explora, recoge, baja) ----
     if (this.registry.get('autoplay') && !this.bagUI && !this.teamUI && !this.shopUI && !this.transitioning && !this.fishing) {
       this.updateDepths();
-      if (!this.stepping) { this.botTimer += delta; if (this.botTimer > 90) { this.botTimer = 0; this.autoStep(); } }
+      if (this.registry.get('godtest')) {
+        // MODO DIOS TESTER: turbo — muchos pasos INSTANTÁNEOS por frame (≈x500)
+        const budget = this.registry.get('godspeed') || 200;
+        for (let i = 0; i < budget; i++) {
+          if (this.transitioning || this.stepping || this.bagUI || this.shopUI || this.teamUI) break;
+          this.autoStep();
+        }
+      } else if (!this.stepping) { this.botTimer += delta; if (this.botTimer > 90) { this.botTimer = 0; this.autoStep(); } }
       else this.botTimer = 0;
       return;   // ignora input humano mientras la IA juega
     }
@@ -854,6 +885,7 @@ export class FloorScene extends Phaser.Scene {
   }
 
   step(tc, tr, dir, running) {
+    if (this.registry.get('godtest')) return this.stepInstant(tc, tr);   // turbo: sin tweens
     this.stepping = true;
     const prev = { col: this.col, row: this.row };
     this.col = tc; this.row = tr;
@@ -973,6 +1005,9 @@ export class FloorScene extends Phaser.Scene {
     const pick = (arr) => arr[Math.floor(rng.float() * arr.length)];
     const cx = (COLS - 1) / 2 | 0, cy = (ROWS - 1) / 2 | 0;   // zona de spawn
     const taken = [];
+    // corredores de las puertas hasta el centro: NUNCA bloquearlos con obstáculos, o
+    // una puerta (¡a veces la de las escaleras!) quedaría inalcanzable → sala perdida.
+    const corridor = this.doorSafeTiles(room);
     const freeCell = (minDist) => {
       for (let tries = 0; tries < 30; tries++) {
         const c = 2 + Math.floor(rng.float() * (COLS - 4));
@@ -980,6 +1015,7 @@ export class FloorScene extends Phaser.Scene {
         const cell = tm.cells[r][c];
         if (cell.base !== 'floor' || cell.blocked || cell.decor) continue;
         if (Math.abs(c - cx) <= 1 && Math.abs(r - cy) <= 1) continue;          // no taponar el spawn
+        if (corridor.has(c + ',' + r)) continue;                               // no taponar puertas
         if (taken.some(t => Math.max(Math.abs(t.c - c), Math.abs(t.r - r)) < minDist)) continue;
         return { c, r };
       }
@@ -1154,6 +1190,7 @@ export class FloorScene extends Phaser.Scene {
 
   startTrainerBattle(t) {
     if (this.transitioning) return;
+    if (this.registry.get('godtest')) { t.beaten = true; return this.godSkipBattle('entrenador'); }
     this.transitioning = true; this.stepping = false;
     t.beaten = true; (this.run.found = this.run.found || []).push(t.key);
     const ex = this.add.text(t.sprite.x, t.sprite.y - 32, '!', { fontFamily: '"Press Start 2P"', fontSize: '16px', color: '#ffd76a', stroke: '#05060a', strokeThickness: 4 }).setOrigin(0.5).setDepth(99999);
@@ -1194,6 +1231,7 @@ export class FloorScene extends Phaser.Scene {
 
   startBossBattle() {
     if (this.transitioning) return;
+    if (this.registry.get('godtest')) { this.bossTile = null; return this.godSkipBattle(this.isGuardian ? 'guardián' : 'jefe'); }
     this.transitioning = true; this.stepping = false;
     (this.run.found = this.run.found || []).push(`boss:${this.floorNum}`);
     const d = diffOf(this.run), guardian = this.isGuardian;
@@ -1308,6 +1346,7 @@ export class FloorScene extends Phaser.Scene {
     // blindado: si algo falla, NO debe tumbar el juego (Carlos: "al pararme en la
     // love ball [marcador del centro] explota todo"). Cualquier error → toast.
     try {
+      if (this.registry.get('godtest')) return;   // tester: no abre tienda/centro (evita atascos)
       if (this.serviceBusy) return;            // anti-reentrada (paso repetido sobre el marcador)
       if (type === 'pokecenter') {
         if (!this.run?.party?.some(m => m.hp < m.maxhp || m.status)) return this.toast('Enfermera: "¡Vuelve cuando me necesites!"');
@@ -1398,6 +1437,12 @@ export class FloorScene extends Phaser.Scene {
   descend() {
     if (this.transitioning) return;
     this.transitioning = true;
+    // MODO DIOS: registra el piso superado y baja INSTANTÁNEO (sin animación)
+    if (this.registry.get('godtest')) {
+      const rep = (typeof window !== 'undefined') ? window.__godreport : null;
+      if (rep) { rep.floorsCleared = (rep.floorsCleared || 0) + 1; rep.lastFloor = this.floorNum; rep.roomsVisited = (rep.roomsVisited || 0) + this.visited.size; }
+      return this.scene.restart({ seed: this.seedBase, floor: this.floorNum + 1 });
+    }
     this.toast(`Bajando al piso ${this.floorNum + 1}...`);
     this.tweens.add({ targets: this.player, scale: 0.1, angle: 360, duration: 420, ease: 'Quad.in' });
     this.cameras.main.fadeOut(450, 0, 0, 0);
@@ -1408,6 +1453,7 @@ export class FloorScene extends Phaser.Scene {
     const dir = this.borderDir(c, r);
     const to = this.doors.get(dir);
     if (to == null) return;
+    if (this.registry.get('godtest')) { this.buildRoom(to, dir); return; }   // tester: cambio de sala instantáneo
     this.transitioning = true;
     this.cameras.main.fadeOut(170, 0, 0, 0);
     this.time.delayedCall(180, () => { this.buildRoom(to, dir); this.cameras.main.fadeIn(170, 0, 0, 0); });
@@ -1467,11 +1513,58 @@ export class FloorScene extends Phaser.Scene {
   autoStep() {
     if (this.serviceBusy) return;
     const DS = [['up', 0, -1], ['down', 0, 1], ['left', -1, 0], ['right', 1, 0]];
+    const DOOR_T = { N: { c: 7, r: 0 }, S: { c: 7, r: ROWS - 1 }, W: { c: 0, r: 5 }, E: { c: COLS - 1, r: 5 } };
     // 1) objeto/NPC justo al lado → recoger / entrar
     for (const [d, dx, dy] of DS) {
       const c = this.col + dx, r = this.row + dy;
       const pk = this.pickups?.find(p => p.c === c && p.r === r);
       if (pk) { this.faceDir(d); return this.botPickup(pk); }
+    }
+    // 1.5) MODO DIOS TESTER: explora TODAS las salas; al terminar (o rendirse), vuelve
+    //      a la sala de escaleras y DESCIENDE directo — sin depender de pisar el agujero
+    //      (en pueblos un edificio puede taparlo) ni de holeTile (null fuera de esa sala).
+    if (this.registry.get('godtest')) {
+      // límites ESCALADOS por nº de salas (los pisos de 20 salas necesitan más pasos
+      // que los de 5). floorSteps NO se reinicia al cambiar de sala.
+      const nRooms = this.floor.roomById.size;
+      this.floorSteps = (this.floorSteps || 0) + 1;
+      // tope DURO: si tras MUCHOS pasos no logró bajar (p.ej. acceso a escaleras
+      // bloqueado), lo registra como bug real y FUERZA el descenso (nunca se cuelga).
+      if (this.floorSteps > Math.max(6000, nRooms * 600)) {
+        const rep = (typeof window !== 'undefined') ? window.__godreport : null;
+        if (rep) { (rep.boxedIn = rep.boxedIn || []).push({ floor: this.floorNum, biome: this.biome.id, safe: !!this.floor.isSafeFloor, visited: this.visited.size, rooms: nRooms }); }
+        return this.descend();
+      }
+      const exploring = !this.giveUpExplore && !this.allRoomsVisited();
+      if (exploring) {
+        if (this.visited.size > (this._lastVisited || 0)) { this._lastVisited = this.visited.size; this.exploreFails = 0; }   // progreso → resetea fallos
+        // se rinde de explorar si: gasta demasiados pasos, o falla en ruta muchas veces
+        // seguidas (sala no visitada tras una puerta físicamente bloqueada → inalcanzable)
+        if (this.floorSteps > nRooms * 300 || (this.exploreFails || 0) > 24) { this.giveUpExplore = true; }
+        else {
+          const ud = this.nextUnvisitedDoorDir();
+          if (ud) {
+            const dir = this.botPathDir(DOOR_T[ud]);
+            if (dir) return this.botMove(dir);
+            this.exploreFails = (this.exploreFails || 0) + 1;   // no pude pathear a esa puerta
+          } else { this.giveUpExplore = true; }   // no queda sala alcanzable sin visitar
+        }
+      }
+      if (this.giveUpExplore || this.allRoomsVisited()) {
+        if (this.currentRoomId === this.floor.exitId) return this.descend();   // ¡en las escaleras! baja
+        const ed = this.nextDoorDir();
+        if (ed) { const dir = this.botPathDir(DOOR_T[ed]); if (dir) return this.botMove(dir); }
+        for (const door of (this.floor.roomById.get(this.currentRoomId)?.doors || [])) {
+          const dir = this.botPathDir(DOOR_T[door.dir]); if (dir) return this.botMove(dir);
+        }
+        // ENCAJONADO: no puede llegar a la salida. Lo registra y FUERZA el descenso
+        // para seguir cubriendo pisos (posible bug real: pueblo que bloquea el camino).
+        if (++this.exploreStall > 1200) {
+          const rep = (typeof window !== 'undefined') ? window.__godreport : null;
+          if (rep) { (rep.boxedIn = rep.boxedIn || []).push({ floor: this.floorNum, biome: this.biome.id, safe: !!this.floor.isSafeFloor, visited: this.visited.size, rooms: this.floor.roomById.size }); }
+          return this.descend();
+        }
+      }
     }
     // 2) escaleras de este piso → ir a bajar
     if (this.holeTile) { const dir = this.botPathDir(this.holeTile); if (dir) return this.botMove(dir); }
@@ -1484,7 +1577,6 @@ export class FloorScene extends Phaser.Scene {
     }
     // 4) avanzar hacia la SALIDA (puerta del camino más corto); si esa puerta no es
     //    alcanzable (obstáculos), prueba CUALQUIER puerta de la sala que sí lo sea.
-    const DOOR_T = { N: { c: 7, r: 0 }, S: { c: 7, r: ROWS - 1 }, W: { c: 0, r: 5 }, E: { c: COLS - 1, r: 5 } };
     const dd = this.nextDoorDir();
     if (dd) { const dir = this.botPathDir(DOOR_T[dd]); if (dir) return this.botMove(dir); }
     const room = this.floor.roomById.get(this.currentRoomId);
@@ -1569,6 +1661,98 @@ export class FloorScene extends Phaser.Scene {
     if (this.walkable(tc, tr)) this.step(tc, tr, dir, false);
   }
 
+  // ---------- MODO DIOS (tester automático): explora todo, no muere, turbo ----------
+  /** ¿Se visitaron ya todas las salas de este piso? */
+  allRoomsVisited() {
+    for (const id of this.floor.roomById.keys()) if (!this.visited.has(id)) return false;
+    return true;
+  }
+
+  /** Dirección (N/S/E/W) de la puerta hacia la SALA NO VISITADA más cercana (BFS del
+   *  grafo de salas). null si no queda ninguna alcanzable. */
+  nextUnvisitedDoorDir() {
+    const f = this.floor, start = this.currentRoomId;
+    const prev = new Map([[start, null]]), q = [start];
+    while (q.length) {
+      const id = q.shift();
+      for (const dr of (f.roomById.get(id)?.doors || [])) {
+        if (prev.has(dr.to)) continue;
+        prev.set(dr.to, { from: id, dir: dr.dir });
+        if (!this.visited.has(dr.to)) {            // sala nueva: traza el PRIMER paso
+          let cur = dr.to, step = prev.get(cur);
+          while (step && step.from !== start) { cur = step.from; step = prev.get(cur); }
+          return step?.dir || dr.dir;
+        }
+        q.push(dr.to);
+      }
+    }
+    return null;
+  }
+
+  /** Paso INSTANTÁNEO (sin tweens): teletransporta al jugador y la cola, y dispara
+   *  onTileStep de inmediato. Solo en MODO DIOS, para correr a velocidad bestial. */
+  stepInstant(tc, tr) {
+    const prev = { col: this.col, row: this.row };
+    this.col = tc; this.row = tr;
+    const p = this.tileCenter(tc, tr);
+    this.player.setPosition(p.x, p.y);
+    this.history.unshift(prev);
+    this.history.length = Math.min(this.history.length, this.followers.length + 1);
+    this.followers.forEach((fl, k) => {
+      const tile = this.history[k]; if (!tile) return;
+      const fp = this.tileCenter(tile.col, tile.row);
+      fl.sprite.setPosition(fp.x, fp.y); fl.homeX = fp.x; fl.homeY = fp.y; fl.wandering = false;
+    });
+    this.stepping = false;
+    this.onTileStep();
+  }
+
+  // ---------- CONSOLA DEBUG (Código Konami) — cheats para probar el juego ----------
+  /** Da un Pokémon por NOMBRE (o id), eligiendo NIVEL y STATS específicas. */
+  dbgGive(name, level = 50, stats = null) {
+    const q = String(name || '').trim().toLowerCase();
+    const sp = SPECIES.find(s => s.name === q) || SPECIES.find(s => String(s.id) === q) || SPECIES.find(s => s.name.includes(q));
+    if (!sp) { this.toast(`DEBUG: no existe "${name}"`); return null; }
+    const mon = makeBattleMon(sp.id, Phaser.Math.Clamp((level | 0) || 50, 1, 100));
+    if (stats) {
+      for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) if (stats[k] != null) mon.stats[k] = stats[k] | 0;
+      if (stats.hp != null) { mon.maxhp = stats.hp | 0; mon.hp = mon.maxhp; }
+    }
+    mon.correa = true;
+    if (this.run.party.length < 6) this.run.party.push(mon); else (this.run.box = this.run.box || []).push(mon);
+    if (!this.run.dex.caught.includes(sp.id)) this.run.dex.caught.push(sp.id);
+    this.buildFollowers(); saveRun(this.registry, this.floorNum);
+    this.toast(`DEBUG: ${mon.name.toUpperCase()} Nv${mon.level} ${this.run.party.length <= 6 ? 'al equipo' : 'a la caja'}`);
+    return mon;
+  }
+
+  dbgHeal() {
+    this.run.party.forEach(m => { m.hp = m.maxhp; m.status = null; m.pp = Object.fromEntries(m.moves.map(mv => [mv, MOVES[mv].pp])); });
+    this.buildFollowers(); this.toast('DEBUG: equipo curado al 100%');
+  }
+
+  dbgLevel(n = 1) {
+    const m = this.run.party.find(x => x.hp > 0) || this.run.party[0]; if (!m) return;
+    m.level = Phaser.Math.Clamp(m.level + (n | 0), 1, 100);
+    m.stats = computeStats({ base: m.base, level: m.level, nature: m.nature, ivs: m.ivs, evs: m.evs });
+    m.maxhp = m.stats.hp; m.hp = m.maxhp;
+    this.toast(`DEBUG: ${m.name.toUpperCase()} ahora Nv${m.level}`);
+  }
+
+  dbgWarp(floor) { this.scene.restart({ seed: this.seedBase, floor: Phaser.Math.Clamp(floor | 0, 1, 9111) }); }
+  dbgMoney(n) { this.run.money = (this.run.money || 0) + (n | 0); this.toast(`DEBUG: dinero → ${this.run.money} ₽`); }
+  dbgItem(key, qty = 10) { this.run.bag[key] = (this.run.bag[key] || 0) + (qty | 0); this.toast(`DEBUG: +${qty} ${key}`); }
+  dbgReveal() { for (const id of this.floor.roomById.keys()) this.visited.add(id); this.toast('DEBUG: mapa revelado'); }
+
+  /** En MODO DIOS no se libran combates (invencible por diseño): se registran y se
+   *  cuentan como victoria para que la progresión (pools/encuentros) avance normal. */
+  godSkipBattle(kind) {
+    const rep = (typeof window !== 'undefined') ? (window.__godreport || (window.__godreport = {})) : null;
+    if (rep) { rep.encounters = (rep.encounters || 0) + 1; rep.byKind = rep.byKind || {}; rep.byKind[kind] = (rep.byKind[kind] || 0) + 1; }
+    this.run.wins = (this.run.wins || 0) + 1;
+    this.encCooldown = 6;
+  }
+
   // ---------- encuentros (por casilla) ----------
   onTileStep() {
     // ¿agujero de bajada?
@@ -1603,6 +1787,7 @@ export class FloorScene extends Phaser.Scene {
 
   startEncounter(forced = true, opts = {}) {
     if (this.transitioning) return;
+    if (this.registry.get('godtest')) return this.godSkipBattle(opts.water ? 'pesca' : 'salvaje');
     // PUEBLO: nada de combates salvajes en todo el piso seguro
     if (this.floor.isSafeFloor) { if (forced) this.toast('Es un pueblo seguro: aquí no hay Pokémon salvajes.'); return; }
     const room = this.floor.roomById.get(this.currentRoomId);

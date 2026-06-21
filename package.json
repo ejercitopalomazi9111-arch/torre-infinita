@@ -9,7 +9,8 @@
     "build": "vite build && node tools/postbuild.mjs",
     "preview": "vite preview",
     "smoke": "node tools/smoke.mjs",
-    "shot": "node tools/shot.mjs"
+    "shot": "node tools/shot.mjs",
+    "godtest": "node tools/godtest.mjs"
   },
   "devDependencies": {
     "puppeteer": "^25.1.0",
