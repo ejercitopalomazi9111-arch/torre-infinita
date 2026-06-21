@@ -3,7 +3,7 @@
 // { idPadre: { to: idHijo, level: N } }
 import { writeFileSync } from 'node:fs';
 
-const MAX_CHAIN = 265;   // cubre Gen 1-5
+const MAX_CHAIN = 600;   // cubre Gen 1-9 (cadenas inexistentes se ignoran)
 const evos = {};
 const idOf = (url) => parseInt(url.split('/').filter(Boolean).pop(), 10);
 
@@ -12,7 +12,7 @@ function walk(node) {
   for (const child of node.evolves_to || []) {
     const to = idOf(child.species.url);
     const det = (child.evolution_details || []).find(d => d.trigger?.name === 'level-up' && d.min_level);
-    if (det && from <= 576 && to <= 576) evos[from] = { to, level: det.min_level };
+    if (det && from <= 1025 && to <= 1025) evos[from] = { to, level: det.min_level };
     walk(child);
   }
 }
