@@ -12,6 +12,7 @@ import { StoryScene } from './scenes/StoryScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { InteriorScene } from './scenes/InteriorScene.js';
 import { MainMenuScene } from './scenes/MainMenuScene.js';
+import { CoopScene } from './scenes/CoopScene.js';
 
 // VIEW = área LÓGICA de juego (cada escena la usa para su layout interno).
 export const VIEW = { w: 480, h: 360 };
@@ -32,7 +33,7 @@ const config = {
   physics: { default: 'arcade', arcade: { debug: false } },
   input: { gamepad: true },   // control PS4/DualShock (y cualquier gamepad estándar)
   // HudScene va al final → se renderiza POR ENCIMA (overlay persistente).
-  scene: [BootScene, TitleScene, MainMenuScene, IntroScene, CharacterSelectScene, StoryScene, FloorScene, BattleScene, PokedexScene, GameOverScene, InteriorScene, HudScene],
+  scene: [BootScene, TitleScene, MainMenuScene, IntroScene, CharacterSelectScene, StoryScene, FloorScene, BattleScene, PokedexScene, GameOverScene, InteriorScene, CoopScene, HudScene],
 };
 
 /** Confina la cámara de una escena al área central de juego (deja los márgenes

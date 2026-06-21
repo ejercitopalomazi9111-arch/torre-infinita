@@ -1,0 +1,226 @@
+// CoopScene — MULTIJUGADOR LOCAL (couch co-op) hasta 4 jugadores en pantalla
+// dividida. Arena compartida grande por bioma; cada jugador con su control
+// (P1 WASD+FGQE, P2 flechas+JKLB, P3/P4 gamepads). Toca Pokémon salvajes para
+// atraparlos (contador compartido), recoge objetos y lleguen TODOS al portal
+// para bajar al siguiente nivel (más profundo = bioma distinto + más fauna).
+// Mantiene el single-player intacto: es una escena aparte.
+import Phaser from 'phaser';
+import { CANVAS, VIEW } from '../main.js';
+import { registerBiomeTextures } from '../systems/textureFactory.js';
+import { BIOMES, biomeForFloor } from '../../data/biomes.js';
+import { SPECIES } from '../../data/species.generated.js';
+import { makeInput, PLAYER_CONTROLS } from '../systems/input.js';
+import { makeRNG } from '../engine/rng.js';
+import { playBgm, sfx } from '../systems/audio.js';
+
+const T = 32;                 // tamaño de tile en pantalla (igual que FloorScene)
+const AW = 28, AH = 18;       // arena en tiles (ancho × alto) → mundo 896×576
+const COLORS = [0xffd76a, 0x54e0c8, 0xff7ad0, 0x8aff6a];   // P1 oro · P2 cian · P3 rosa · P4 verde
+const PNAME = ['P1', 'P2', 'P3', 'P4'];
+
+export class CoopScene extends Phaser.Scene {
+  constructor() { super('Coop'); }
+
+  init(data) {
+    this.numPlayers = Phaser.Math.Clamp(data.players || 2, 2, 4);
+    this.depth = data.depth || 1;
+    this.seed = data.seed || ('coop-' + Date.now().toString(36));
+    this.catches = data.catches || 0;   // contador compartido (persiste entre niveles)
+  }
+
+  create() {
+    const rng = makeRNG(`${this.seed}:${this.depth}`);
+    this.biome = biomeForFloor(this.depth, this.seed) || BIOMES[0];
+    registerBiomeTextures(this, this.biome);
+    this.cameras.main.setBackgroundColor('#05060a');
+
+    this.world = this.add.container(0, 0);
+    this.blocked = Array.from({ length: AH }, () => Array(AW).fill(false));
+    this.renderArena(rng);
+
+    // --- objetos del mundo ---
+    this.roamers = [];   // Pokémon que deambulan; tocarlos = capturar
+    this.items = [];     // objetos recogibles
+    this.spawnFauna(rng);
+
+    // portal de descenso compartido (centro-abajo)
+    this.portal = { c: AW >> 1, r: AH - 3 };
+    const pp = this.tile(this.portal.c, this.portal.r);
+    const ring = this.add.ellipse(pp.x, pp.y + 2, 44, 28, 0x000000, 0.5);
+    this.portalSprite = this.add.ellipse(pp.x, pp.y, 34, 20, 0x7ad0ff, 0.9);
+    this.add.tween({ targets: this.portalSprite, scaleX: 1.15, scaleY: 1.2, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.world.add([ring, this.portalSprite]);
+
+    // --- jugadores + split-screen ---
+    this.players = [];
+    this.buildPlayers();
+    this.setupCameras();
+    this.buildHud();
+
+    playBgm(this, this.biome?.music || 'bgm_explore', 0.3);   // playBgm hace carga perezosa
+    this.transitioning = false;
+  }
+
+  tile(c, r) { return { x: c * T + T / 2, y: r * T + T / 2 }; }
+
+  renderArena(rng) {
+    const key = (id) => `${this.biome.id}_${id}`;
+    const rt = this.add.renderTexture(0, 0, AW * T, AH * T).setOrigin(0, 0);
+    const tmp = this.add.image(0, 0, key('floor0')).setOrigin(0, 0).setScale(2).setVisible(false);
+    for (let r = 0; r < AH; r++) for (let c = 0; c < AW; c++) {
+      const wall = r === 0 || c === 0 || r === AH - 1 || c === AW - 1;
+      // obstáculos internos dispersos (no en el borde de spawn ni el centro)
+      const obst = !wall && rng.float() < 0.07 && !(r < 3 && c < 6) && !(Math.abs(c - (AW >> 1)) < 2 && Math.abs(r - (AH >> 1)) < 2);
+      const v = Math.floor(rng.float() * 5);
+      tmp.setTexture(key((wall || obst ? 'wall' : 'floor') + v)).setPosition(c * T, r * T);
+      rt.draw(tmp);
+      if (wall || obst) this.blocked[r][c] = true;
+    }
+    tmp.destroy();
+    this.world.add(rt);
+  }
+
+  walkable(c, r) { return c >= 0 && r >= 0 && c < AW && r < AH && !this.blocked[r][c]; }
+
+  spawnFauna(rng) {
+    const free = () => { for (let i = 0; i < 40; i++) { const c = 2 + (rng.float() * (AW - 4) | 0), r = 2 + (rng.float() * (AH - 4) | 0); if (this.walkable(c, r)) return { c, r }; } return { c: 2, r: 2 }; };
+    const pool = SPECIES.filter(s => this.textures.exists('mon_' + s.id));
+    const n = 6 + this.depth + (rng.float() * 4 | 0);
+    for (let i = 0; i < n; i++) {
+      const cell = free(), sp = pool[rng.float() * pool.length | 0]; if (!sp) break;
+      const p = this.tile(cell.c, cell.r);
+      const spr = this.add.image(p.x, p.y, 'mon_' + sp.id).setScale(0.55).setDepth(50 + p.y);
+      this.add.tween({ targets: spr, y: p.y - 4, duration: 600 + rng.float() * 400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.world.add(spr);
+      this.roamers.push({ c: cell.c, r: cell.r, sprite: spr, sp, moveT: 0 });
+    }
+    for (let i = 0; i < 4 + this.depth; i++) {
+      const cell = free(), p = this.tile(cell.c, cell.r);
+      const it = this.add.image(p.x, p.y, this.textures.exists('item_pokeball') ? 'item_pokeball' : 'pokeball').setScale(0.8).setDepth(50 + p.y);
+      this.world.add(it);
+      this.items.push({ c: cell.c, r: cell.r, sprite: it });
+    }
+  }
+
+  buildPlayers() {
+    const spawns = [[2, 2], [4, 2], [2, 4], [4, 4]];
+    for (let i = 0; i < this.numPlayers; i++) {
+      const cfg = PLAYER_CONTROLS[i];
+      const input = makeInput(this, cfg.map, cfg.pad);
+      const [c, r] = spawns[i], p = this.tile(c, r);
+      const body = this.add.rectangle(p.x, p.y, 20, 26, COLORS[i]).setStrokeStyle(2, 0x05060a).setDepth(60 + p.y);
+      const eye = this.add.rectangle(p.x, p.y - 4, 10, 4, 0x05060a).setDepth(61 + p.y);
+      const grp = this.add.container(0, 0, [body, eye]); this.world.add(grp);
+      this.players.push({ idx: i, c, r, input, body, eye, facing: 'down', stepping: false, moveT: 0, catches: 0, color: COLORS[i], onPortal: false });
+    }
+  }
+
+  setupCameras() {
+    const n = this.numPlayers, W = CANVAS.w, H = CANVAS.h;
+    // viewports: 2 = mitades verticales · 3-4 = cuadrantes
+    const vp = n === 2 ? [[0, 0, W / 2, H], [W / 2, 0, W / 2, H]]
+      : [[0, 0, W / 2, H / 2], [W / 2, 0, W / 2, H / 2], [0, H / 2, W / 2, H / 2], [W / 2, H / 2, W / 2, H / 2]];
+    this.cameras.main.setViewport(...vp[0]);
+    this.pcams = [this.cameras.main];
+    for (let i = 1; i < n; i++) this.pcams.push(this.cameras.add(...vp[i]));
+    this.pcams.forEach((cam, i) => {
+      cam.setBounds(0, 0, AW * T, AH * T);
+      cam.setZoom(1);
+      cam.startFollow(this.players[i].body, true, 0.15, 0.15);
+      cam.setBackgroundColor(i % 2 ? '#0a0e16' : '#070a12');
+    });
+  }
+
+  buildHud() {
+    // cámara de UI que renderiza SOLO la barra superior; las cámaras de juego la ignoran.
+    this.hud = this.add.container(0, 0).setDepth(100000).setScrollFactor(0);
+    const bar = this.add.rectangle(0, 0, CANVAS.w, 18, 0x05060a, 0.85).setOrigin(0, 0);
+    this.hudTxt = this.add.text(6, 4, '', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#e8f0ff' });
+    // separadores de pantalla
+    const g = this.add.graphics(); g.lineStyle(2, 0xffd76a, 0.5);
+    if (this.numPlayers === 2) g.lineBetween(CANVAS.w / 2, 0, CANVAS.w / 2, CANVAS.h);
+    else { g.lineBetween(CANVAS.w / 2, 0, CANVAS.w / 2, CANVAS.h); g.lineBetween(0, CANVAS.h / 2, CANVAS.w, CANVAS.h / 2); }
+    this.hud.add([bar, this.hudTxt, g]);
+    this.uiCam = this.cameras.add(0, 0, CANVAS.w, CANVAS.h);
+    // cada cámara de juego ignora el HUD; la de UI ignora el mundo
+    this.pcams.forEach(cam => cam.ignore(this.hud));
+    this.uiCam.ignore(this.world);
+    this.uiCam.ignore(this.players.flatMap(p => [p.body, p.eye]));
+    this.refreshHud();
+  }
+
+  refreshHud() {
+    const parts = this.players.map(p => `${PNAME[p.idx]}:${p.catches}`);
+    this.hudTxt.setText(`NIVEL ${this.depth}   capturas ${this.catches}   ${parts.join('  ')}   (todos al portal ↓)`);
+  }
+
+  update(time, delta) {
+    if (this.transitioning) return;
+    for (const pl of this.players) this.movePlayer(pl, delta);
+    this.wanderRoamers(delta);
+    // ¿todos los jugadores sobre el portal? → bajar
+    if (this.players.every(p => p.c === this.portal.c && p.r === this.portal.r)) this.descend();
+    // salir al menú con START de cualquier jugador
+    if (this.players.some(p => p.input.justDown('START'))) { this.scene.start('MainMenu'); }
+  }
+
+  movePlayer(pl, delta) {
+    if (pl.stepping) return;
+    const d = pl.input.dirHeld();
+    if (!d) return;
+    pl.facing = d;
+    const [dx, dy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[d];
+    const nc = pl.c + dx, nr = pl.r + dy;
+    if (!this.walkable(nc, nr)) return;
+    pl.c = nc; pl.r = nr; pl.stepping = true;
+    const p = this.tile(nc, nr);
+    const dur = pl.input.isDown('B') ? 90 : 150;   // B = correr
+    this.tweens.add({ targets: [pl.body], x: p.x, y: p.y, duration: dur, ease: 'Linear', onComplete: () => { pl.stepping = false; this.afterStep(pl); } });
+    this.tweens.add({ targets: [pl.eye], x: p.x, y: p.y - 4, duration: dur, ease: 'Linear' });
+    pl.body.setDepth(60 + p.y); pl.eye.setDepth(61 + p.y);
+  }
+
+  afterStep(pl) {
+    // ¿pisó un Pokémon? → captura (contador compartido)
+    const ri = this.roamers.findIndex(m => m.c === pl.c && m.r === pl.r);
+    if (ri >= 0) {
+      const m = this.roamers[ri]; this.roamers.splice(ri, 1);
+      this.tweens.add({ targets: m.sprite, y: m.sprite.y - 16, alpha: 0, scale: 0.1, duration: 260, onComplete: () => m.sprite.destroy() });
+      pl.catches++; this.catches++; sfx(this, 'levelup', 0.5); this.refreshHud();
+      this.popup(pl, `¡${m.sp.name.toUpperCase()}!`);
+    }
+    // ¿objeto? → recoger
+    const ii = this.items.findIndex(it => it.c === pl.c && it.r === pl.r);
+    if (ii >= 0) {
+      const it = this.items[ii]; this.items.splice(ii, 1);
+      this.tweens.add({ targets: it.sprite, y: it.sprite.y - 14, alpha: 0, duration: 250, onComplete: () => it.sprite.destroy() });
+      sfx(this, 'select', 0.5); this.popup(pl, '+objeto');
+    }
+  }
+
+  popup(pl, txt) {
+    const t = this.add.text(pl.body.x, pl.body.y - 22, txt, { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffffff', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(99000);
+    this.world.add(t); this.uiCam?.ignore(t);
+    this.tweens.add({ targets: t, y: t.y - 14, alpha: 0, duration: 700, onComplete: () => t.destroy() });
+  }
+
+  wanderRoamers(delta) {
+    for (const m of this.roamers) {
+      m.moveT += delta;
+      if (m.moveT < 700) continue; m.moveT = 0;
+      if (Math.random() < 0.5) continue;
+      const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][Math.random() * 4 | 0];
+      if (!this.walkable(m.c + dx, m.r + dy)) continue;
+      if (this.roamers.some(o => o !== m && o.c === m.c + dx && o.r === m.r + dy)) continue;
+      m.c += dx; m.r += dy; const p = this.tile(m.c, m.r);
+      this.tweens.add({ targets: m.sprite, x: p.x, y: p.y, duration: 320, ease: 'Linear' });
+      m.sprite.setDepth(50 + p.y);
+    }
+  }
+
+  descend() {
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.time.delayedCall(320, () => this.scene.restart({ players: this.numPlayers, depth: this.depth + 1, seed: this.seed, catches: this.catches }));
+  }
+}

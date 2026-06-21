@@ -25,13 +25,25 @@ export function setMusicVol(v, scene) { MUSIC_VOL = Math.max(0, Math.min(1, v));
 export function setSfxVol(v) { SFX_MULT = Math.max(0, Math.min(1, v)); persistAudio(); }
 
 export function playBgm(scene, key, volume = 0.35) {
+  if (scene.registry.get('godtest')) return;   // cazabugs/turbo: sin música (satura el loader)
   const cur = scene.registry.get('bgm');
   if (cur && cur.key === key && cur.isPlaying) return;
   try { cur?.stop(); } catch { /* ya destruida */ }
-  if (!scene.cache.audio.exists(key)) return;
-  const snd = scene.sound.add(key, { loop: true, volume: volume * MUSIC_VOL });
-  snd.play();
-  scene.registry.set('bgm', snd);
+  scene.registry.set('bgmWant', key);   // recuerda la última pista pedida (anti-carrera)
+  const start = () => {
+    if (scene.registry.get('bgmWant') !== key) return;   // ya pidieron otra; aborta
+    if (!scene.cache.audio.exists(key)) return;
+    const snd = scene.sound.add(key, { loop: true, volume: volume * MUSIC_VOL });
+    snd.play();
+    scene.registry.set('bgm', snd);
+  };
+  if (scene.cache.audio.exists(key)) return start();
+  // CARGA PEREZOSA: el BGM se baja la primera vez que se necesita (no los 17 al
+  // boot → arranque más rápido y sin saturar el decodificador de audio).
+  const file = (key.indexOf('bgm_') === 0 ? key.slice(4) : key);
+  scene.load.audio(key, 'assets/audio/bgm/' + file + '.mp3');
+  scene.load.once('complete', start);
+  scene.load.start();
 }
 
 export function stopBgm(scene) {

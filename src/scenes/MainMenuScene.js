@@ -86,12 +86,23 @@ export class MainMenuScene extends Phaser.Scene {
     this.list('MENÚ PRINCIPAL', [
       { label: 'NUEVA PARTIDA', onPick: () => this.showSlots('new') },
       { label: 'CARGAR PARTIDA', onPick: () => this.showSlots('load') },
+      { label: 'CO-OP LOCAL', onPick: () => this.showCoop() },
       { label: 'REPETICIONES', onPick: () => { this.scene.launch('Pokedex', { run: { dex: { seen: [], caught: [] } }, mode: 'rec', returnTo: 'MainMenu' }); this.scene.pause(); } },
       { label: 'MEJORAS', onPick: () => this.showPerks() },
       { label: 'LOGROS', onPick: () => this.showAchievements() },
       { label: 'AJUSTES', onPick: () => this.showSettings() },
       { label: 'CRÉDITOS', onPick: () => this.showCredits() },
     ]);
+  }
+
+  showCoop() {
+    this.state = 'coop';
+    const items = [2, 3, 4].map(n => ({
+      label: `${n} JUGADORES`,
+      desc: n === 2 ? 'P1 WASD+FGQE · P2 flechas+JKLB · pantalla partida' : `${n} en pantalla dividida (P3/P4 con mando)`,
+      onPick: () => this.go('Coop', { players: n }),
+    }));
+    this.list('CO-OP LOCAL — ¿cuántos juegan?', items, 'Couch co-op · todos al portal para bajar · Start vuelve al menú');
   }
 
   slotLabel(meta, i) {

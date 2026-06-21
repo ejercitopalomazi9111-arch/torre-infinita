@@ -18,18 +18,38 @@ export const DEFAULT_MAP = {
   L: [KC.Q], R: [KC.E], START: [KC.ENTER], SELECT: [KC.SHIFT, KC.C],
 };
 
+// MULTIJUGADOR LOCAL: mapas de teclado de Carlos para P1 y P2 (P3/P4 = gamepads).
+//   P1: WASD mover · F=A G=B Q=L E=R T=Select R=□(bolsa) · Backspace=menú
+//   P2: flechas mover · J=A K=B L=L B=R N=Select M=□(bolsa) · Esc=menú
+export const PLAYER1_MAP = {
+  UP: [KC.W], DOWN: [KC.S], LEFT: [KC.A], RIGHT: [KC.D],
+  A: [KC.F], B: [KC.G], L: [KC.Q], R: [KC.E], SELECT: [KC.T], TRI: [KC.R], START: [KC.BACKSPACE],
+};
+export const PLAYER2_MAP = {
+  UP: [KC.UP], DOWN: [KC.DOWN], LEFT: [KC.LEFT], RIGHT: [KC.RIGHT],
+  A: [KC.J], B: [KC.K], L: [KC.L], R: [KC.B], SELECT: [KC.N], TRI: [KC.M], START: [KC.ESC],
+};
+// índice de jugador → { map de teclado (o null si solo gamepad), índice de gamepad }
+export const PLAYER_CONTROLS = [
+  { map: PLAYER1_MAP, pad: 0 },   // P1: teclado izquierdo (+ gamepad 0 si hay)
+  { map: PLAYER2_MAP, pad: 1 },   // P2: teclado derecho   (+ gamepad 1 si hay)
+  { map: null, pad: 2 },          // P3: gamepad 2
+  { map: null, pad: 3 },          // P4: gamepad 3
+];
+
 // GAMEPAD (PS4/DualShock y estándar): ✕=A · ◯=B · D-pad/stick izq=direcciones
 // · Options=Start · Share=Select · L1/R1=L/R. Índices del mapeo estándar W3C.
 const PAD_BTN = { A: [0], B: [1], L: [4], R: [5], START: [9], SELECT: [8], UP: [12], DOWN: [13], LEFT: [14], RIGHT: [15], SQR: [2], TRI: [3] };
 const AXIS_T = 0.45;   // zona muerta del stick
 
-/** Crea el gestor de input GBA para una escena. */
-export function makeInput(scene, map = DEFAULT_MAP) {
+/** Crea el gestor de input GBA para una escena. `padIndex` = qué gamepad usa este
+ *  jugador (0 por defecto). `map` puede ser null (jugador solo-gamepad). */
+export function makeInput(scene, map = DEFAULT_MAP, padIndex = 0) {
   const keys = {};
-  for (const [btn, codes] of Object.entries(map)) {
+  for (const [btn, codes] of Object.entries(map || {})) {
     keys[btn] = codes.map(c => scene.input.keyboard.addKey(c, false));
   }
-  const getPad = () => (scene.input.gamepad && scene.input.gamepad.total > 0) ? scene.input.gamepad.getPad(0) : null;
+  const getPad = () => (scene.input.gamepad && scene.input.gamepad.total > padIndex) ? scene.input.gamepad.getPad(padIndex) : null;
   const padDown = (btn) => {
     const p = getPad(); if (!p) return false;
     if ((PAD_BTN[btn] || []).some(i => p.buttons[i]?.pressed)) return true;

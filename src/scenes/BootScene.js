@@ -9,7 +9,7 @@ import { WALKMETA } from '../../data/walkmeta.generated.js';
 import { OWMETA } from '../../data/owmeta.generated.js';
 import { BALLS, HEALS, REPELS, FIELD, CONSUM } from '../../data/balls.js';
 import { ITEMS } from '../../data/items.js';
-import { SFX_KEYS, BGM_KEYS, loadAudioSettings } from '../systems/audio.js';
+import { SFX_KEYS, loadAudioSettings } from '../systems/audio.js';
 import { REAL_TILE_BIOMES } from '../../data/tilemeta.generated.js';
 import { MEGAS } from '../../data/megas.generated.js';
 
@@ -28,10 +28,9 @@ export class BootScene extends Phaser.Scene {
       this.load.image('item_' + k, 'assets/sprites/items/' + v.file + '.png');
     }
     // música REAL de Pokémon FireRed/LeafGreen (tools/fetch-firered.mjs):
-    // exploración por bioma + combate + pantallas. Una pista por escena.
-    for (const k of BGM_KEYS) {
-      this.load.audio('bgm_' + k, 'assets/audio/bgm/' + k + '.mp3');
-    }
+    // exploración por bioma + combate + pantallas. CARGA PEREZOSA: cada pista se baja
+    // la primera vez que se necesita (playBgm en audio.js), no las 17 al boot → arranque
+    // mucho más rápido (~55MB menos) y sin saturar el decodificador de audio del navegador.
     // SFX de interfaz CC0 (Juhani Junkala) — sonidos al interactuar
     for (const k of SFX_KEYS) this.load.audio('sfx_' + k, 'assets/audio/sfx/' + k + '.wav');
     // props GBA reales (árbol/roca rompible, 4 frames 16x16)

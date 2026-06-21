@@ -157,8 +157,7 @@ export class FloorScene extends Phaser.Scene {
   // bioma (data/biomes.js); fallback a Pallet Town si la pista no existe.
   exploreBgm() {
     if (this.floor?.isSafeFloor) return 'bgm_town';
-    const m = this.biome?.music;
-    return (m && this.cache.audio.exists(m)) ? m : 'bgm_explore';
+    return this.biome?.music || 'bgm_explore';   // playBgm hace carga perezosa
   }
 
   // ---------- construir sala ----------
