@@ -10,6 +10,7 @@ import { registerBiomeTextures } from '../systems/textureFactory.js';
 import { SPECIES, SPECIES_BY_TYPE } from '../../data/species.generated.js';
 import { LEGENDARY_IDS } from '../../data/legendaries.generated.js';
 import { makeBattleMon } from '../systems/combat/battle.js';
+import { canBreed, eggResult } from '../systems/pokemon/breeding.js';
 import { getRun, saveRun, tryUnlock, diffOf } from '../systems/state.js';
 import { playBgm, sfx } from '../systems/audio.js';
 import { makeInput } from '../systems/input.js';
@@ -323,6 +324,18 @@ export class FloorScene extends Phaser.Scene {
       this.tweens.add({ targets: tag, y: cp.y - 36, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
 
+    // CRIADERO — en cada pueblo hay un Criador: deja a DITTO + otro Pokémon (o dos de
+    // la misma familia) y te entrega un HUEVO que eclosiona caminando. Se le habla con A.
+    const breedCell = this.freeTownCell(rng);
+    if (breedCell) {
+      const breederId = (OWMETA['daisy'] && this.textures.exists('ow_daisy')) ? 'daisy' : (POOL[0] || 'red');
+      this.spawnNpc(breedCell.c, breedCell.r, breederId, 'criadero', '¡Hola! Soy el Criador. Tráeme a Ditto con otro Pokémon (o dos de la misma familia) y te consigo un Huevo.');
+      const bp = this.tileCenter(breedCell.c, breedCell.r);
+      const btag = this.add.text(bp.x, bp.y - 30, '🥚 CRIADERO', { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#9fd97f', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(60 + bp.y);
+      this.worldLayer.add(btag);
+      this.tweens.add({ targets: btag, y: bp.y - 36, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    }
+
     // vecinos de relleno repartidos por la sala (vida del pueblo)
     const nFlavor = 1 + Math.floor(rng.float() * 3);
     for (let i = 0; i < nFlavor; i++) {
@@ -424,7 +437,8 @@ export class FloorScene extends Phaser.Scene {
     const [fdx, fdy] = DIRV[this.facing];
     const npc = this.npcs?.find(n => n.c === this.col + fdx && n.r === this.row + fdy);
     if (!npc) return false;
-    if (npc.role) this.enterBuilding(npc.role);     // ENTRAR al edificio (interior real)
+    if (npc.role === 'criadero') this.openCriadero();   // CRIADERO: cría con Ditto (no es interior)
+    else if (npc.role) this.enterBuilding(npc.role);     // ENTRAR al edificio (interior real)
     else this.toast(npc.line);
     return true;
   }
@@ -1393,6 +1407,28 @@ export class FloorScene extends Phaser.Scene {
       this.toast('El servicio falló, intenta de nuevo.');
       console.warn('useService error:', e);
     }
+  }
+
+  /** CRIADERO: busca una pareja compatible en el equipo y te entrega un Huevo de la
+   *  forma base. Ditto cría con cualquiera; o dos de la misma familia. Un huevo a la vez. */
+  openCriadero() {
+    try {
+      if (this.registry.get('godtest')) return;
+      const party = this.run?.party || [];
+      if (this.run.egg) return this.toast('Criador: "Ya llevas un Huevo. ¡Que eclosione primero!"');
+      let pair = null;
+      for (let i = 0; i < party.length && !pair; i++)
+        for (let j = i + 1; j < party.length && !pair; j++)
+          if (canBreed(party[i], party[j])) pair = [party[i], party[j]];
+      if (!pair) return this.toast('Criador: "Tráeme a DITTO con otro Pokémon, o dos de la misma familia."');
+      const egg = eggResult(pair[0], pair[1]);
+      if (!egg || !this.textures.exists('mon_' + egg.id)) return this.toast('Criador: "Hmm, esta pareja no congenió..."');
+      this.run.egg = { speciesId: egg.id, steps: 220 };
+      sfx(this, 'select', 0.6);
+      this.cameras.main.flash(180, 200, 255, 200);
+      this.toast(`🥚 ¡El Criador te entrega un Huevo de ${egg.name.toUpperCase()}! Camina para que eclosione.`);
+      saveRun(this.registry, this.floorNum);
+    } catch (e) { this.toast('El criadero falló, intenta de nuevo.'); console.warn('openCriadero error:', e); }
   }
 
   openShop() {
