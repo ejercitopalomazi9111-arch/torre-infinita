@@ -24,7 +24,7 @@ export function makeBattleMon(speciesId, level, opts = {}) {
     speciesId, name: opts.nickname || sp.name, level,
     types: sp.types, base: sp.base, sprite: sp.sprite,
     nature: opts.nature, ivs: opts.ivs, evs: opts.evs,
-    moves: opts.moves || makeMoveset(sp),
+    moves: opts.moves || ((sp.name || '').toLowerCase() === 'ditto' ? ['transform'] : makeMoveset(sp)),
     ball: opts.ball || 'pokeball',   // con qué ball vive (se actualiza al capturarlo)
     ability: opts.ability || abil?.name || null,   // habilidad real (PokeAPI)
     item: opts.item || null,                        // objeto equipado (held)
@@ -137,6 +137,11 @@ export class Battle {
   /** Disparadores de ENTRADA al campo (Intimidación). */
   triggerSwitchIn(side) {
     const m = this.mon(side);
+    // IMPOSTER: al entrar, Ditto copia automáticamente al rival activo.
+    if (m.ability === 'imposter' && !m._origForm) {
+      const foe = this.mon(this.foeSide(side));
+      if (foe && foe.hp > 0 && !foe._origForm) this.doTransform(side, this.foeSide(side));
+    }
     if (m.ability === 'intimidate') {
       const foeS = this.foeSide(side);
       if (this.mon(foeS).hp > 0) {
@@ -323,7 +328,7 @@ export class Battle {
   tryRun() {
     const me = this.mon('A'), foe = this.mon('B');
     const chance = Math.max(0.25, Math.min(0.95, 0.5 + (me.stats.spe - foe.stats.spe) / 200 + this.turn * 0.05));
-    if (this.rng.float() < chance) { this.over = true; this.winner = null; this.result = 'fled'; this.log.push({ t: 'run' }); this.log.push({ t: 'end', winner: null, result: 'fled' }); }
+    if (this.rng.float() < chance) { this.over = true; this.winner = null; this.result = 'fled'; this.log.push({ t: 'run' }); this.log.push({ t: 'end', winner: null, result: 'fled' }); this._revertTransforms(); }
     else this.log.push({ t: 'runfail' });
   }
 
@@ -332,6 +337,7 @@ export class Battle {
     if (index == null || index < 0 || index >= team.length || team[index].hp <= 0 || index === this.active[side]) { this.log.push({ t: 'badswitch', side }); return; }
     const out = this.mon(side);
     if (out.ability === 'natural-cure' && out.status) out.status = null;   // se cura al retirarse
+    this._revertOne(out);   // la transformación de Ditto se deshace al cambiar
     this.active[side] = index;
     const m = this.mon(side);
     this.log.push({ t: 'switchIn', side, name: m.name, speciesId: m.speciesId, hp: m.hp, maxhp: m.maxhp, ball: m.ball });
@@ -374,6 +380,7 @@ export class Battle {
       this.over = true; this.winner = 'A'; this.result = 'caught';
       this.log.push({ t: 'caught', speciesId: foe.speciesId, name: foe.name, shakes, item });
       this.log.push({ t: 'end', winner: 'A', result: 'caught' });
+      this._revertTransforms();
     } else {
       this.log.push({ t: 'catchfail', shakes });
     }
@@ -491,6 +498,7 @@ export class Battle {
 
   applyStatusMove(side, foeSide, move) {
     const e = move.effect; if (!e) return;
+    if (e.kind === 'transform') return this.doTransform(side, foeSide);
     const targetSide = e.target === 'foe' ? foeSide : side;
     if (e.status) this.inflict(targetSide, e.status);
     if (e.stat) this.applyStage(targetSide, e.stat, e.stages);
@@ -519,8 +527,9 @@ export class Battle {
 
   onFaint(side) {
     this.log.push({ t: 'faint', side, name: this.mon(side).name });
+    this._revertOne(this.mon(side));   // si era Ditto transformado, recupera su forma
     const next = this.teams[side].findIndex(m => m.hp > 0);
-    if (next === -1) { this.over = true; this.winner = this.foeSide(side); this.result = this.winner === 'A' ? 'win' : 'lose'; this.log.push({ t: 'end', winner: this.winner, result: this.result }); }
+    if (next === -1) { this.over = true; this.winner = this.foeSide(side); this.result = this.winner === 'A' ? 'win' : 'lose'; this.log.push({ t: 'end', winner: this.winner, result: this.result }); this._revertTransforms(); }
     else {
       this.active[side] = next;
       const nm2 = this.teams[side][next];
@@ -529,10 +538,50 @@ export class Battle {
     }
   }
 
+  /** TRANSFORMACIÓN (Ditto / Imposter): copia especie, tipos, stats, movimientos y
+   *  habilidad del objetivo. El HP propio NO se copia. Es REVERSIBLE (snapshot en
+   *  _origForm) para no corromper el Pokémon guardado al terminar el combate/cambiar. */
+  doTransform(side, fromSide) {
+    const me = this.mon(side), src = this.mon(fromSide);
+    if (me._origForm || src._origForm || !src || src.hp <= 0) {
+      this.log.push({ t: 'transformfail', side, name: me.name, text: `¡El ataque de ${me.name.toUpperCase()} falló!` });
+      return;
+    }
+    me._origForm = {
+      speciesId: me.speciesId, name: me.name, types: me.types, base: me.base,
+      sprite: me.sprite, ability: me.ability, moves: me.moves,
+      stats: { ...me.stats }, pp: { ...me.pp }, stages: { ...me.stages },
+    };
+    const origName = me.name;
+    me.types = [...src.types]; me.base = src.base; me.sprite = src.sprite;
+    me.speciesId = src.speciesId; me.ability = src.ability;
+    me.moves = [...src.moves];
+    me.pp = Object.fromEntries(me.moves.map(id => [id, Math.min(5, MOVES[id]?.pp ?? 5)]));
+    me.stages = { ...src.stages };
+    const ns = computeStats({ base: src.base, level: me.level, nature: me.nature, ivs: me.ivs, evs: me.evs });
+    ns.hp = me._origForm.stats.hp;   // el HP NO se copia: conserva el suyo
+    me.stats = ns;
+    me.transformedInto = src.speciesId;
+    this.log.push({ t: 'transform', side, into: src.speciesId, sprite: src.sprite, name: origName, text: `¡${origName.toUpperCase()} se TRANSFORMÓ en ${src.name.toUpperCase()}!` });
+  }
+
+  /** Deshace la transformación de un combatiente (si la tenía). Conserva su HP actual. */
+  _revertOne(m) {
+    const o = m && m._origForm; if (!o) return;
+    m.speciesId = o.speciesId; m.name = o.name; m.types = o.types; m.base = o.base;
+    m.sprite = o.sprite; m.ability = o.ability; m.moves = o.moves;
+    m.stats = o.stats; m.pp = o.pp; m.stages = o.stages;
+    delete m._origForm; delete m.transformedInto;
+  }
+
+  /** Revierte TODAS las transformaciones (al terminar el combate). */
+  _revertTransforms() { for (const s of ['A', 'B']) for (const m of this.teams[s]) this._revertOne(m); }
+
   checkEnd() {
     for (const side of ['A', 'B']) if (this.aliveCount(side) === 0 && !this.over) {
       this.over = true; this.winner = this.foeSide(side); this.result = this.winner === 'A' ? 'win' : 'lose';
       this.log.push({ t: 'end', winner: this.winner, result: this.result });
     }
+    if (this.over) this._revertTransforms();
   }
 }

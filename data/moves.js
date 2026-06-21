@@ -10,6 +10,7 @@ export const MOVES = {
   quick_attack:  { name: 'Ataque Rápido', type: 'normal', cat: 'physical', power: 40, acc: 100, pp: 30, prio: 1, anim: 'dash' },
   body_slam:     { name: 'Golpe Cuerpo', type: 'normal', cat: 'physical', power: 85, acc: 100, pp: 15, prio: 0, effect: { status: 'paralysis', chance: 0.3 }, anim: 'impact' },
   growl:         { name: 'Gruñido', type: 'normal', cat: 'status', power: null, acc: 100, pp: 40, prio: 0, effect: { stat: 'atk', stages: -1, target: 'foe' }, anim: 'buff' },
+  transform:     { name: 'Transformación', type: 'normal', cat: 'status', power: null, acc: 999, pp: 10, prio: 0, effect: { kind: 'transform', target: 'foe' }, anim: 'buff' },
   // --- fire ---
   ember:         { name: 'Ascuas', type: 'fire', cat: 'special', power: 40, acc: 100, pp: 25, prio: 0, effect: { status: 'burn', chance: 0.1 }, anim: 'projectile' },
   flamethrower:  { name: 'Lanzallamas', type: 'fire', cat: 'special', power: 90, acc: 100, pp: 15, prio: 0, effect: { status: 'burn', chance: 0.1 }, anim: 'beam' },
