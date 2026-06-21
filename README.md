@@ -56,6 +56,11 @@ En menús: **mantén pulsada** una dirección para desplazarte rápido. Casi tod
 - **Movimiento Z:** equipa el **Cristal Z**; tu próximo golpe se vuelve el Z-move de su tipo (×1.8).
 - **Dinamax:** equipa la **Maxibanda**; el Pokémon se hace gigante y pega como Movimiento Max.
 
+### ⚔ Online (Club de Batalla)
+En cada pueblo hay un **⚔ CLUB**: habla con su encargado (**A**) para jugar con un amigo por internet (**P2P**, sin servidor — usa WebRTC). Uno **HOSPEDA** (genera un código de 4 letras) y el otro **se UNE** con ese código. Desde ahí pueden:
+- **Comerciar** un Pokémon (oferta mutua + confirmación → intercambio real que se guarda).
+- **Combatir PVP** por *lockstep* determinista (ambos eligen movimiento cada turno y el combate se resuelve idéntico en las dos pantallas, sin trampa).
+
 ### 🏆 Meta-progresión
 Al perder ganas **puntos** (pisos + capturas + victorias). Gástalos en el menú **MEJORAS** en mejoras **permanentes** (más dinero, pociones, balls, nivel inicial, Cristal Z de inicio) que aplican a tus próximas partidas.
 

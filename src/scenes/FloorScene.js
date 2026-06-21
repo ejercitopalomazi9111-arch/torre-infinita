@@ -305,6 +305,24 @@ export class FloorScene extends Phaser.Scene {
       this.placeBuilding(COLS - 4, 3, pickH(), safe);
       if (rng.float() < 0.45) this.placeBuilding(mid, 2, 'gym', safe);
     }
+    // CLUB DE BATALLA ONLINE — en CADA pueblo hay un encargado que abre el modo
+    // online P2P (comerciar / PVP con un amigo por código de sala). Se le habla con A.
+    let clubCell = this.freeTownCell(rng);
+    if (!clubCell) {   // respaldo: primera casilla fija válida
+      for (const [c, r] of [[COLS - 3, 6], [3, 6], [COLS - 3, 4], [3, 4]]) {
+        const cell = this.tilemap.cells?.[r]?.[c];
+        if (cell && cell.base === 'floor' && !cell.blocked && !this._corridor?.has(c + ',' + r)) { clubCell = { c, r }; break; }
+      }
+    }
+    if (clubCell) {
+      const clubId = (OWMETA['wallace'] && this.textures.exists('ow_wallace')) ? 'wallace' : (POOL[0] || 'red');
+      this.spawnNpc(clubCell.c, clubCell.r, clubId, 'club', '¡Bienvenido al Club de Batalla! Conéctate con un amigo para comerciar o luchar online.');
+      const cp = this.tileCenter(clubCell.c, clubCell.r);
+      const tag = this.add.text(cp.x, cp.y - 30, '⚔ CLUB', { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#ffd76a', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(60 + cp.y);
+      this.worldLayer.add(tag);
+      this.tweens.add({ targets: tag, y: cp.y - 36, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    }
+
     // vecinos de relleno repartidos por la sala (vida del pueblo)
     const nFlavor = 1 + Math.floor(rng.float() * 3);
     for (let i = 0; i < nFlavor; i++) {
@@ -1337,9 +1355,12 @@ export class FloorScene extends Phaser.Scene {
     if (this.transitioning) return;
     this.transitioning = true;
     this.cameras.main.fadeOut(200, 0, 0, 0);
+    // CLUB DE BATALLA ONLINE: no es un interior, es el modo P2P (comercio / PVP).
+    const scene = kind === 'club' ? 'Online' : 'Interior';
+    const data = kind === 'club' ? { returnTo: 'Floor' } : { kind, run: this.run, returnTo: 'Floor' };
     this.time.delayedCall(210, () => {
       this.scene.pause();
-      this.scene.launch('Interior', { kind, run: this.run, returnTo: 'Floor' });
+      this.scene.launch(scene, data);
     });
   }
 

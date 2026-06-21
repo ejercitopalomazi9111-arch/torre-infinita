@@ -13,6 +13,9 @@ import { HudScene } from './scenes/HudScene.js';
 import { InteriorScene } from './scenes/InteriorScene.js';
 import { MainMenuScene } from './scenes/MainMenuScene.js';
 import { CoopScene } from './scenes/CoopScene.js';
+import { OnlineScene } from './scenes/OnlineScene.js';
+import { PvpScene } from './scenes/PvpScene.js';
+import { Net } from './systems/net.js';
 
 // VIEW = área LÓGICA de juego (cada escena la usa para su layout interno).
 export const VIEW = { w: 480, h: 360 };
@@ -33,7 +36,7 @@ const config = {
   physics: { default: 'arcade', arcade: { debug: false } },
   input: { gamepad: true },   // control PS4/DualShock (y cualquier gamepad estándar)
   // HudScene va al final → se renderiza POR ENCIMA (overlay persistente).
-  scene: [BootScene, TitleScene, MainMenuScene, IntroScene, CharacterSelectScene, StoryScene, FloorScene, BattleScene, PokedexScene, GameOverScene, InteriorScene, CoopScene, HudScene],
+  scene: [BootScene, TitleScene, MainMenuScene, IntroScene, CharacterSelectScene, StoryScene, FloorScene, BattleScene, PokedexScene, GameOverScene, InteriorScene, CoopScene, OnlineScene, PvpScene, HudScene],
 };
 
 /** Confina la cámara de una escena al área central de juego (deja los márgenes
@@ -44,6 +47,7 @@ export function frameCamera(scene) {
 
 // handle global para QA (tools/shot.mjs y debug)
 window.__GAME = new Phaser.Game(config);
+window.Net = Net;   // expuesto para QA del transporte P2P y debug
 
 // ---------------------------------------------------------------------------
 // MODO DIOS / TESTER AUTOMÁTICO — control externo para el cazabugs (tools/godtest.mjs)

@@ -248,6 +248,42 @@ export class Battle {
     return this.log.splice(0);
   }
 
+  /** PVP LOCKSTEP: resuelve un turno con las acciones REALES de AMBOS jugadores
+   *  (no IA). Es determinista por seed → ambos clientes producen el MISMO log sin
+   *  desincronizarse. v1 solo movimientos (sin objetos/cambios/fenómenos). */
+  resolveTurnPvp(actA, actB) {
+    if (this.over) return this.log.splice(0);
+    this.turn++;
+    this.log = [];
+    const moveOf = (side, act) => {
+      const m = this.mon(side);
+      const id = act?.move;
+      return (id && (m.pp[id] ?? 0) > 0) ? id : 'struggle';
+    };
+    const actions = { A: { move: moveOf('A', actA) }, B: { move: moveOf('B', actB) } };
+    const order = ['A', 'B'].sort((s1, s2) => {
+      const p1 = MOVES[actions[s1].move]?.prio || 0, p2 = MOVES[actions[s2].move]?.prio || 0;
+      if (p1 !== p2) return p2 - p1;
+      const sp1 = effStat(this.mon(s1), 'spe'), sp2 = effStat(this.mon(s2), 'spe');
+      if (sp1 !== sp2) return sp2 - sp1;
+      return this.rng.float() < 0.5 ? -1 : 1;
+    });
+    for (const side of order) {
+      if (this.over) break;
+      if (this.mon(side).hp <= 0) continue;
+      this.doMove(side, actions[side]);
+    }
+    this.endOfTurnStatus();
+    this.checkEnd();
+    return this.log.splice(0);
+  }
+
+  /** Índice del próximo Pokémon vivo de un lado (para auto-cambio en PVP).
+   *  Determinista (primer vivo) → ambos clientes cambian al mismo. -1 si ninguno. */
+  nextAlive(side) {
+    return this.teams[side].findIndex(m => m.hp > 0);
+  }
+
   endOfTurnStatus() {
     for (const side of ['A', 'B']) {
       let m = this.mon(side);
