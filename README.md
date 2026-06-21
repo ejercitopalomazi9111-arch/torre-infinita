@@ -1,6 +1,8 @@
 # 🗼 Torre Infinita
 
-Un **roguelike Pokémon** de 9111 pisos hecho con HTML5 + Phaser 3. Sube la torre piso a piso, captura entre **650 Pokémon (Gen 1–5)**, vence entrenadores y jefes, y desata fenómenos de batalla. Cada partida es única.
+Un **roguelike Pokémon** de 9111 pisos hecho con HTML5 + Phaser 3. Sube la torre piso a piso, captura entre **1024 Pokémon (Gen 1–9, Pokédex nacional)**, vence entrenadores y jefes, y desata fenómenos de batalla. Cada partida es única.
+
+🎮 **Juega ya:** https://ejercitopalomazi9111-arch.github.io/torre-infinita/
 
 > Hecho por **Mazi (Carlos)** con Claude. Sprites: PokeAPI · pret/pokeemerald. Música/SFX: FireRed/LeafGreen.
 
@@ -72,9 +74,29 @@ npm run build    # build de producción → dist/ (estático, hosteable)
 npm run preview  # sirve el dist localmente
 
 # QA
-node tools/smoke.mjs         # generador de torre (0 softlocks)
-node tools/combat-smoke.mjs  # 250 batallas / 650 especies
-node tools/shot.mjs          # captura el juego real (gate 0 errores de consola)
+node tools/smoke.mjs            # generador de torre (0 softlocks)
+node tools/combat-smoke.mjs     # 250 batallas / 1024 especies
+node tools/shot.mjs [url]       # captura el juego real (gate 0 errores de consola)
+node tools/godtest.mjs [pisos] [url]   # CAZABUGS: IA invencible recorre N pisos
+```
+
+### 🐞 Modo Dios / Cazabugs (QA automático)
+La IA juega sola, invencible, visitando **todas las salas** de cada piso a velocidad
+bestial, y reporta errores/softlocks. Desde la consola del navegador:
+```js
+__GODTEST.start({ floor: 1, speed: 200 })  // arranca el tester
+__GODTEST.report()                          // pisos superados, encuentros, etc.
+__GODTEST.stop()
+```
+O headless: `node tools/godtest.mjs 200` (necesita `npm run preview` corriendo).
+
+### ⌨️ Consola DEBUG (Código Konami)
+Dentro del juego, pulsa **`` ` ``** o el **Código Konami** (↑↑↓↓←→←→ B A) para abrir el
+panel de cheats: dar Pokémon por nombre+nivel+stats, curar, subir nivel, revelar
+mapa, dinero, warp de piso, y control de la IA/Modo Dios. Por consola:
+```js
+__DEBUG.give('charizard', 100, { atk: 999 })   // dar Pokémon a la medida
+__DEBUG.heal(); __DEBUG.reveal(); __DEBUG.warp(50); __DEBUG.god()
 ```
 
 **Arquitectura:** escenas Phaser en `src/scenes/`, sistemas en `src/systems/`, datos en `data/` (varios `*.generated.js` por los `tools/fetch-*.mjs`). Los tiles de bioma son procedurales (`src/engine/texgen.js`); el resto de arte son sprites reales.
