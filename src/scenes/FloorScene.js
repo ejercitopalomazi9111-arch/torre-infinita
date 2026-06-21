@@ -8,6 +8,7 @@ import { generateFloor } from '../systems/tower/floorGen.js';
 import { generateRoomTiles } from '../systems/tower/tileGen.js';
 import { registerBiomeTextures } from '../systems/textureFactory.js';
 import { SPECIES, SPECIES_BY_TYPE } from '../../data/species.generated.js';
+import { LEGENDARY_IDS } from '../../data/legendaries.generated.js';
 import { makeBattleMon } from '../systems/combat/battle.js';
 import { getRun, saveRun, tryUnlock, diffOf } from '../systems/state.js';
 import { playBgm, sfx } from '../systems/audio.js';
@@ -39,9 +40,10 @@ const ENERGETIC = new Set(['jolly', 'naive', 'hasty', 'naughty', 'brave', 'lonel
 
 // legendarios/míticos + pseudolegendarios finales: NUNCA en encuentros al azar
 // (solo en salas-puzzle súper raras del piso 20+, pendiente del roadmap)
-const LEGENDS = new Set([144, 145, 146, 150, 151, 243, 244, 245, 249, 250, 251,
-  377, 378, 379, 380, 381, 382, 383, 384, 385, 386, 480, 481, 482, 483, 484, 485,
-  486, 487, 488, 489, 490, 491, 492, 493, 494, 149, 248, 373, 376, 445]);
+// pseudolegendarios fuertes (no marcados "legendary" en PokeAPI pero igual de raros)
+// + TODOS los legendarios/míticos reales (data-driven, Gen 1-9, ver legendaries.generated.js)
+const PSEUDO_LEGENDS = [149, 248, 373, 376, 445];
+const LEGENDS = new Set([...PSEUDO_LEGENDS, ...LEGENDARY_IDS]);
 const BST = new Map(SPECIES.map(s => [s.id, Object.values(s.base).reduce((a, b) => a + b, 0)]));
 
 // catálogo de la TIENDA de zona segura (pisos 5, 15, 25...)

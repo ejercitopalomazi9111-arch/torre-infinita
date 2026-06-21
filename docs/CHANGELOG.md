@@ -64,3 +64,4 @@
 [2026-06-20 --:--] Roster: 650 → 720 Pokémon (GEN 6 / Kalos completa, +70; tools/fetch-sprites.mjs 651-721, 0 fallos). Regla ≥1 Pokémon por update cumplida. combat-smoke ✅ (720 especies), godtest ✅, shot ✅.
 [2026-06-20 --:--] Roster: 720 → 808 Pokémon (GEN 7 / Alola completa, +88; tools/fetch-sprites.mjs 722-809, 0 fallos). combat-smoke ✅ (808), godtest ✅ 0 softlocks, shot ✅.
 [2026-06-20 --:--] Roster: 808 → 1024 Pokémon (GEN 8 Galar + GEN 9 Paldea, +216; fetch-sprites 810-1025, 0 fallos). POKÉDEX NACIONAL COMPLETO (Gen 1-9). combat-smoke ✅ (1024), godtest ✅, shot ✅.
+[2026-06-20 --:--] FIX balance: legendarios/míticos de TODAS las gen (Gen 1-9) ya no aparecen como salvajes al azar. tools/fetch-legendaries.mjs baja is_legendary||is_mythical de PokeAPI → data/legendaries.generated.js (94 IDs), fusionado con pseudolegendarios en FloorScene LEGENDS. Antes la lista hardcodeada solo llegaba a Gen 6. Efecto extra: guardianes con más variedad. smoke/godtest/shot ✅.
