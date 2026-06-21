@@ -2,9 +2,17 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Torre Infinita — Roguelike Pokémon</title>
-  <link rel="icon" href="data:," />
+  <!-- PWA: instalable en Android/iOS sin tienda de apps -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#05060a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Torre Infinita" />
+  <link rel="icon" type="image/png" href="icons/favicon-64.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <style>
@@ -22,9 +30,17 @@
     }
     canvas { image-rendering: pixelated; display: block; }
   </style>
-  <script type="module" crossorigin src="./assets/index-BCEu3x7-.js"></script>
+  <script type="module" crossorigin src="./assets/index-CelEjjxX.js"></script>
 </head>
 <body>
   <div id="game"></div>
+  <!-- Registro del Service Worker (offline + instalable). Ruta relativa = funciona en subpath. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW no registrado:', e));
+      });
+    }
+  </script>
 </body>
 </html>
