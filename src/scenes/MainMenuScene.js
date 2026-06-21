@@ -150,9 +150,11 @@ export class MainMenuScene extends Phaser.Scene {
     const a = getAudioSettings();
     this.music = a.music; this.sfxv = a.sfx;
     const bar = (v) => '[' + '█'.repeat(Math.round(v * 10)) + '·'.repeat(10 - Math.round(v * 10)) + ']';
+    const touchOn = (localStorage.getItem('ti_touch') === '1');
     this.list('AJUSTES', [
       { label: `Música  ${bar(this.music)}`, onPick: () => {} },
       { label: `Sonidos ${bar(this.sfxv)}`, onPick: () => {} },
+      { label: `Controles táctiles: ${touchOn ? 'SÍ' : 'NO'}`, desc: 'Mando en pantalla para jugar en el teléfono', onPick: () => { const t = window.__TOUCH; if (t) { touchOn ? t.hide() : t.show(); } sfx(this, 'cursor'); this.showSettings(); } },
       { label: 'Borrar guardado (ranura)', onPick: () => this.showDelete() },
       { label: 'Reinicio de fábrica', color: '#f08080', onPick: () => this.showReset() },
       { label: '← Atrás', color: '#9fb0d0', onPick: () => this.showMain() },

@@ -1,0 +1,12 @@
+{
+  "appId": "club.mazis.torreinfinita",
+  "appName": "Torre Infinita",
+  "webDir": "dist",
+  "backgroundColor": "#05060a",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

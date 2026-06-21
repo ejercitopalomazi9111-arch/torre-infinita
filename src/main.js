@@ -16,6 +16,7 @@ import { CoopScene } from './scenes/CoopScene.js';
 import { OnlineScene } from './scenes/OnlineScene.js';
 import { PvpScene } from './scenes/PvpScene.js';
 import { Net } from './systems/net.js';
+import { initTouchControls } from './systems/touch.js';
 
 // VIEW = área LÓGICA de juego (cada escena la usa para su layout interno).
 export const VIEW = { w: 480, h: 360 };
@@ -48,6 +49,7 @@ export function frameCamera(scene) {
 // handle global para QA (tools/shot.mjs y debug)
 window.__GAME = new Phaser.Game(config);
 window.Net = Net;   // expuesto para QA del transporte P2P y debug
+initTouchControls();   // mando táctil en pantallas de teléfono (auto) / ?touch=1
 
 // ---------------------------------------------------------------------------
 // MODO DIOS / TESTER AUTOMÁTICO — control externo para el cazabugs (tools/godtest.mjs)
