@@ -237,6 +237,7 @@ export class FloorScene extends Phaser.Scene {
       const lt = this.add.text(bp.x, bp.y - 34, this.isGuardian ? '¡GUARDIÁN!' : '¡JEFE!', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: this.isGuardian ? '#ffd76a' : '#ff5a5a', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5);
       this.tweens.add({ targets: lt, alpha: 0.3, duration: 500, yoyo: true, repeat: -1 });
       this.worldLayer.add(mk); this.worldLayer.add(lt);
+      this.bossMarker = mk; this.bossLabel = lt;   // refs para borrarlos tras vencerlo (#7)
     }
 
     // spawn en casilla
@@ -1166,7 +1167,12 @@ export class FloorScene extends Phaser.Scene {
       for (let t = 0; t < 20 && !ok; t++) { c = 2 + Math.floor(rng.float() * (COLS - 4)); r = 2 + Math.floor(rng.float() * (ROWS - 4)); ok = tm.cells[r]?.[c]?.base === 'floor' && !tm.cells[r][c].blocked && (Math.abs(c - 7) > 1 || Math.abs(r - 5) > 1); }
       if (!ok) continue;
       const id = pool[Math.floor(rng.float() * pool.length)], pos = this.tileCenter(c, r);
-      const spr = this.add.image(pos.x, pos.y, 'mon_' + id).setScale(0.5).setOrigin(0.5, 0.8).setDepth(49).setAlpha(0.92);
+      // #19: encajar el corredor DENTRO de su casilla (antes el sprite de combate
+      // a escala 0.5 con origen 0.8 sobresalía hacia arriba y los lados). Lo escalamos
+      // a ~1.15 casillas, anclado por los pies y centrado sobre el tile.
+      const cs = this.textures.get('mon_' + id).getSourceImage();
+      const csc = (T * 1.15) / Math.max(cs.width, cs.height);
+      const spr = this.add.image(pos.x, pos.y + T * 0.28, 'mon_' + id).setScale(csc).setOrigin(0.5, 0.9).setDepth(50 + pos.y).setAlpha(0.92);
       this.props.push(spr);
       const roamer = { sprite: spr, id, c, r };
       this.roamers.push(roamer);
@@ -1181,8 +1187,9 @@ export class FloorScene extends Phaser.Scene {
           const nc = roamer.c + dx, nr = roamer.r + dy;
           if (this.inBounds(nc, nr) && tm.cells[nr]?.[nc]?.base === 'floor' && !tm.cells[nr][nc].blocked) {
             roamer.c = nc; roamer.r = nr; const np = this.tileCenter(nc, nr); if (dx) spr.setFlipX(dx > 0);
-            this.tweens.add({ targets: spr, x: np.x, y: np.y, duration: 240, ease: 'Quad.out', onComplete: () => this.checkRoamerTouch() });
-            this.tweens.add({ targets: spr, scaleY: 0.44, duration: 120, yoyo: true });
+            this.tweens.add({ targets: spr, x: np.x, y: np.y + T * 0.28, duration: 240, ease: 'Quad.out',
+              onUpdate: () => spr.setDepth(50 + spr.y), onComplete: () => this.checkRoamerTouch() });
+            this.tweens.add({ targets: spr, scaleY: spr.scaleY * 0.88, duration: 120, yoyo: true });
             break;
           }
         }
@@ -1279,7 +1286,12 @@ export class FloorScene extends Phaser.Scene {
     if (this.transitioning) return;
     if (this.registry.get('godtest')) { this.bossTile = null; return this.godSkipBattle(this.isGuardian ? 'guardián' : 'jefe'); }
     this.transitioning = true; this.stepping = false;
-    (this.run.found = this.run.found || []).push(`boss:${this.floorNum}`);
+    // jefe enfrentable UNA sola vez (#7): márcalo, limpia su casilla y borra el marcador
+    // para que al volver de la batalla NO se vuelva a disparar pisando el centro.
+    if (!this.run.found?.includes(`boss:${this.floorNum}`)) (this.run.found = this.run.found || []).push(`boss:${this.floorNum}`);
+    this.bossTile = null;
+    this.bossMarker?.destroy(); this.bossLabel?.destroy();
+    this.bossMarker = this.bossLabel = null;
     const d = diffOf(this.run), guardian = this.isGuardian;
     const lvl = guardian ? 100 : Phaser.Math.Clamp(Math.round((5 + Math.floor(this.floorNum * 1.2)) * d.lvl), 5, 100);
     const boss = makeBattleMon(this.bossSpeciesId, lvl);
@@ -1289,7 +1301,7 @@ export class FloorScene extends Phaser.Scene {
     boss.isBossMon = true;   // mecánica única: FURIA al bajar del 50% PS
     this.cameras.main.shake(guardian ? 700 : 400, guardian ? 0.02 : 0.012); this.cameras.main.flash(guardian ? 400 : 220, 140, 0, 0);
     this.toast(guardian ? `¡El GUARDIÁN DE LA TORRE, ${boss.name.toUpperCase()}, despierta ante ti!` : '¡Un Pokémon colosal bloquea el camino!');
-    this.time.delayedCall(guardian ? 1000 : 620, () => {
+    this.time.delayedCall(guardian ? 2200 : 1600, () => {
       this.scene.pause();
       this.scene.launch('Battle', { playerTeam: this.run.party, enemyTeam: [boss], run: this.run, floor: this.floorNum, biome: this.biome, seed: `${this.floor.seed}:boss:${Date.now()}`, returnTo: 'Floor', boss: true, guardian, trainerName: boss.name, aiStyle: guardian ? 'smart' : 'boss' });
     });
@@ -1299,7 +1311,9 @@ export class FloorScene extends Phaser.Scene {
   /** ¿El jugador y algún corredor están en contacto? → combate con esa especie. */
   checkRoamerTouch() {
     if (this.transitioning || this.floor.isSafeFloor) return;
-    const o = this.roamers?.find(x => x.sprite.active && Math.abs(x.c - this.col) + Math.abs(x.r - this.row) <= 1);
+    // #20: solo entra a combate al COMPARTIR casilla con el corredor (antes saltaba
+    // con cualquier casilla adyacente: Manhattan <= 1).
+    const o = this.roamers?.find(x => x.sprite.active && x.c === this.col && x.r === this.row);
     if (!o) return;
     o.ev?.remove();
     this.roamers = this.roamers.filter(x => x !== o);
@@ -1531,7 +1545,10 @@ export class FloorScene extends Phaser.Scene {
   }
 
   updateDepths() {
-    this.player.setDepth(50 + this.player.y);
+    // +1 de sesgo: en la MISMA fila que una roca/árbol (mismo y) el empate lo ganaba
+    // el prop por orden de inserción y te tapaba (#18). Sin romper el y-sort entre filas
+    // (la separación por casilla es de T=16 px).
+    this.player.setDepth(50 + this.player.y + 1);
     for (const f of this.followers) f.sprite.setDepth(50 + f.sprite.y - 4);
     if (this.bikeSprite?.visible) this.bikeSprite.setPosition(this.player.x, this.player.y + 7).setDepth(this.player.depth - 1).setFlipX(this.facing === 'left');
   }
