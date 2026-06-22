@@ -115,6 +115,34 @@ export const Touch = {
   toggle() { if (root && root.style.display !== 'none') this.hide(); else this.show(); },
 };
 
+// --- Aviso de rotación: el juego es HORIZONTAL (672×360); en teléfono vertical
+//     se ve diminuto, así que cubrimos con "gira el teléfono". Solo en táctil. ---
+let rotEl = null;
+function buildRotateHint() {
+  if (rotEl) return rotEl;
+  const s = document.createElement('style');
+  s.textContent = `
+    #ti-rotate { position:fixed; inset:0; z-index:9500; display:none;
+      background:#05060a; color:#ffd76a; flex-direction:column; gap:18px;
+      align-items:center; justify-content:center; text-align:center;
+      font-family:'Press Start 2P',system-ui,sans-serif; padding:24px; }
+    #ti-rotate .ph { font-size:64px; animation:ti-rot 1.6s ease-in-out infinite; }
+    #ti-rotate .t1 { font-size:14px; line-height:1.5; }
+    #ti-rotate .t2 { font-size:9px; color:#9fb0d0; line-height:1.6; }
+    @keyframes ti-rot { 0%,40%{transform:rotate(0)} 60%,100%{transform:rotate(-90deg)} }`;
+  document.head.appendChild(s);
+  rotEl = document.createElement('div');
+  rotEl.id = 'ti-rotate';
+  rotEl.innerHTML = '<div class="ph">📱</div><div class="t1">GIRA EL TELÉFONO</div><div class="t2">Torre Infinita se juega en horizontal</div>';
+  document.body.appendChild(rotEl);
+  return rotEl;
+}
+function refreshOrientation() {
+  if (!rotEl) return;
+  const portrait = window.matchMedia('(orientation: portrait)').matches && window.innerHeight > window.innerWidth;
+  rotEl.style.display = portrait ? 'flex' : 'none';
+}
+
 /** Inicializa los controles táctiles: auto-visibles en pantallas táctiles, o si
  *  el usuario los activó antes, o con ?touch=1. Siempre deja window.__TOUCH. */
 export function initTouchControls() {
@@ -123,5 +151,13 @@ export function initTouchControls() {
   const forced = new URLSearchParams(location.search).has('touch');
   const pref = localStorage.getItem('ti_touch');
   if (pref === '0') return;                 // el usuario los apagó
-  if (isTouch || forced || pref === '1') Touch.show();
+  if (isTouch || forced || pref === '1') {
+    Touch.show();
+    if (isTouch) {                          // aviso de rotación solo en teléfonos reales
+      buildRotateHint();
+      refreshOrientation();
+      window.addEventListener('resize', refreshOrientation);
+      window.addEventListener('orientationchange', () => setTimeout(refreshOrientation, 100));
+    }
+  }
 }
