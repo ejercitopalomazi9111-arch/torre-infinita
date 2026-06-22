@@ -1343,7 +1343,7 @@ export class FloorScene extends Phaser.Scene {
   rustleGrass(c, r) {
     const g = this.tallCells?.find(t => t.c === c && t.r === r)?.sprite;
     if (!g || !g.active) return;
-    sfx(this, 'grass', 0.45);
+    sfx(this, 'grass', 0.8);   // subido (#32): a 0.45 apenas se oía sobre la música
     this.tweens.add({ targets: g, scaleY: g._baseSY * 0.74, duration: 90, yoyo: true, ease: 'Quad.out' });
     if (this.player) this.tweens.add({ targets: this.player, scaleY: this.baseSY * 0.9, duration: 80, yoyo: true });
   }
