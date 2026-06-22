@@ -590,6 +590,7 @@ export class FloorScene extends Phaser.Scene {
       { label: m.item ? `Quitar objeto (${ITEMS[m.item]?.name})` : 'Equipar objeto', fn: () => { if (m.item) { this.run.bag[m.item] = (this.run.bag[m.item] || 0) + 1; m.item = null; this.renderTeam(); } else { this.teamState = 'pickitem'; this.teamCursor = 0; this.renderTeam(); } } },
       { label: 'Usar disco de habilidad', fn: () => { this.teamState = 'pickdisc'; this.teamCursor = 0; this.renderTeam(); } },
       { label: 'Mover de lugar', fn: () => { this.teamPick = this.teamSel; this.teamState = 'list'; this.teamCursor = this.teamSel; this.renderTeam(); } },
+      { label: 'Poner apodo', fn: () => this.renameMon(m) },
       { label: 'Enviar a la Caja PC', fn: () => this.depositMon(this.teamSel) },
       { label: 'Volver', fn: () => { this.teamState = 'list'; this.teamCursor = this.teamSel; this.renderTeam(); } },
     ];
@@ -687,6 +688,18 @@ export class FloorScene extends Phaser.Scene {
       r.setStrokeStyle(on || picked ? 3 : 2, picked ? 0x54e0c8 : on ? 0xffd76a : 0x2a3a5a);
     });
     if (descKeys && descKeys.length && this.pickDesc?.active) { const k = descKeys[this.teamCursor]; this.pickDesc.setText(ITEMS[k]?.desc || ''); }
+  }
+
+  /** Renombrar (poner APODO) a un Pokémon del equipo. Vacío = vuelve a su nombre de especie. */
+  renameMon(m) {
+    if (typeof window === 'undefined' || !window.prompt) return;
+    const raw = window.prompt(`Apodo para ${m.name.toUpperCase()} (vacío = nombre de especie):`, m.name);
+    if (raw == null) return;   // canceló
+    const trimmed = raw.trim();
+    m.name = trimmed ? trimmed.slice(0, 14) : ((SPECIES.find(s => s.id === m.speciesId)?.name) || m.name);
+    this.toast(`Ahora se llama ${m.name.toUpperCase()}.`);
+    saveRun(this.registry, this.floorNum);
+    this.renderTeam();
   }
 
   /** Acciones del menú EQUIPO según el estado (llamado desde update). */

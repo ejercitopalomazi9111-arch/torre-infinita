@@ -920,6 +920,11 @@ export class BattleScene extends Phaser.Scene {
       if (result === 'caught' && this.run) {
         const mon = structuredClone(this.enemyTeam[this.battle.active.B]);
         const joined = this.run.party.length < 6;   // mensaje VERAZ (antes mentía)
+        // APODO opcional al capturar (no en tester/replay)
+        if (!this.registry.get('godtest') && typeof window !== 'undefined' && window.prompt) {
+          const raw = window.prompt(`¡Capturaste a ${mon.name.toUpperCase()}! Ponle un APODO (deja vacío para usar su nombre):`, '');
+          if (raw && raw.trim()) mon.name = raw.trim().slice(0, 14);
+        }
         addCapturedMon(this.run, mon);
         endMsg = joined ? `¡${mon.name.toUpperCase()} se unió al equipo!` : `¡${mon.name.toUpperCase()} fue enviado a la Caja (equipo lleno)!`;
       } else if (result === 'fled') endMsg = 'Escapaste del combate.';

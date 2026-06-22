@@ -95,7 +95,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.registry.set('trainer', this.pool[this.sel]);
     this.registry.remove('run'); // nueva partida con el personaje elegido
     this.cameras.main.fadeOut(300, 0, 0, 0);
-    this.time.delayedCall(320, () => this.scene.start('Story'));   // intro narrativa → Piso 1
+    this.time.delayedCall(320, () => this.scene.start('Tutorial'));   // tutorial pre-game → picnic → Piso 1
   }
 
   update() {

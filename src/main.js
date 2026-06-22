@@ -8,6 +8,7 @@ import { PokedexScene } from './scenes/PokedexScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene.js';
 import { IntroScene } from './scenes/IntroScene.js';
+import { TutorialScene } from './scenes/TutorialScene.js';
 import { StoryScene } from './scenes/StoryScene.js';
 import { HudScene } from './scenes/HudScene.js';
 import { InteriorScene } from './scenes/InteriorScene.js';
@@ -37,7 +38,7 @@ const config = {
   physics: { default: 'arcade', arcade: { debug: false } },
   input: { gamepad: true },   // control PS4/DualShock (y cualquier gamepad estándar)
   // HudScene va al final → se renderiza POR ENCIMA (overlay persistente).
-  scene: [BootScene, TitleScene, MainMenuScene, IntroScene, CharacterSelectScene, StoryScene, FloorScene, BattleScene, PokedexScene, GameOverScene, InteriorScene, CoopScene, OnlineScene, PvpScene, HudScene],
+  scene: [BootScene, TitleScene, MainMenuScene, IntroScene, CharacterSelectScene, TutorialScene, StoryScene, FloorScene, BattleScene, PokedexScene, GameOverScene, InteriorScene, CoopScene, OnlineScene, PvpScene, HudScene],
 };
 
 /** Confina la cámara de una escena al área central de juego (deja los márgenes
