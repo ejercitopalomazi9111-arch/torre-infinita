@@ -165,7 +165,7 @@ function buildDebugPanel() {
     <button data-act="give" style="width:100%;margin-top:5px">➕ DAR POKÉMON</button>
     <h4>WARP DE PISO</h4>
     <div class="row"><input id="dbg-floor" type="number" placeholder="piso 1-9111" min="1" max="9111"/><button data-act="warp">Ir</button></div>
-    <div id="dbg-hint">Código Konami (↑↑↓↓←→←→ B A) o tecla \` para abrir/cerrar.<br>Consola: window.__DEBUG.give('mewtwo',100,{atk:999})</div>`;
+    <div id="dbg-hint">Tecla <b>0</b> (o Konami ↑↑↓↓←→←→ B A) para abrir/cerrar.<br>Consola: window.__DEBUG.give('mewtwo',100,{atk:999})</div>`;
   document.body.appendChild(p);
   const num = (id) => { const v = document.getElementById(id).value.trim(); return v === '' ? null : (parseInt(v, 10) || 0); };
   const refreshSpd = () => { const e = document.getElementById('dbg-spd'); if (e) e.textContent = 'x' + (window.__GAME.registry.get('godspeed') || 200); };
@@ -203,7 +203,11 @@ function toggleDebugPanel() {
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
 let konamiIdx = 0;
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Backquote') { e.preventDefault(); return toggleDebugPanel(); }
+  // Atajos directos: tecla 0 (fila superior o numpad) y backtick abren/cierran el panel.
+  if (e.code === 'Digit0' || e.code === 'Numpad0' || e.code === 'Backquote') {
+    e.preventDefault();
+    return toggleDebugPanel();
+  }
   konamiIdx = (e.code === KONAMI[konamiIdx]) ? konamiIdx + 1 : (e.code === KONAMI[0] ? 1 : 0);
   if (konamiIdx === KONAMI.length) { konamiIdx = 0; toggleDebugPanel(); }
 });

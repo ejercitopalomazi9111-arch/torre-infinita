@@ -929,34 +929,20 @@ export class BattleScene extends Phaser.Scene {
         endMsg = joined ? `¡${mon.name.toUpperCase()} se unió al equipo!` : `¡${mon.name.toUpperCase()} fue enviado a la Caja (equipo lleno)!`;
       } else if (result === 'fled') endMsg = 'Escapaste del combate.';
       else if (result === 'win') {
-        // EXP + monedas (B1): los 2 primeros combates dan justo para subir
+        // EXP + monedas. Recompensas más generosas (Carlos: "se gana muy poco").
         const mon = this.battle.mon('A');
         const foe = this.enemyTeam[this.battle.active.B];
-        const gain = foe.level * 20 + 15, coins = foe.level * 12;
+        const gain = foe.level * 40 + 40, coins = foe.level * 25 + 10;
         const need = (l) => l * 15 + 10;
-        mon.exp = (mon.exp || 0) + gain;
-        let lvlMsg = '', learnMsg = '';
-        while (mon.exp >= need(mon.level) && mon.level < 100) {
-          mon.exp -= need(mon.level);
-          mon.level++;
-          const ns = computeStats({ base: mon.base, level: mon.level, nature: mon.nature, ivs: mon.ivs, evs: mon.evs });
-          mon.hp = Math.min(ns.hp, mon.hp + Math.max(0, ns.hp - mon.maxhp));
-          mon.stats = ns; mon.maxhp = ns.hp;
-          lvlMsg = ` ¡${mon.name.toUpperCase()} subió al Nv ${mon.level}!`;
-          // APRENDIZAJE: con hueco libre lo aprende ya; con 4 movimientos, se ENCOLA
-          // para abrir el menú interactivo (sprite+stats+movs, elegir cuál olvidar).
-          let mv, guard = 0;
-          while ((mv = nextLearnableMove(mon)) && guard++ < 4) {
-            if (mon.moves.length < 4) {
-              mon.moves.push(mv); if (mon.pp) mon.pp[mv] = MOVES[mv].pp;
-              learnMsg += ` ¡Aprendió ${MOVES[mv].name}!`;
-            } else {
-              if (!this.pendingLearns.some(p => p.mon === mon && p.move === mv)) this.pendingLearns.push({ mon, move: mv });
-              break;   // se resuelve con menú tras la victoria
-            }
-          }
+        // XP COMPARTIDA (#13): TODOS los que salieron al campo ganan la MISMA XP.
+        // El activo abre el menú interactivo de aprendizaje; los demás, en automático.
+        const party = this.run?.party || this.playerTeam;
+        const idxs = [...(this.battle.participated || new Set([this.battle.active.A]))];
+        let lvlMsg = '';
+        for (const i of idxs) {
+          const m = party[i];
+          if (m) lvlMsg += this._gainExp(m, gain, need, m === mon);
         }
-        lvlMsg += learnMsg;
         let prize = this.isTrainer ? 250 + this.floorNum * 30 : 0;     // los entrenadores pagan premio
         if (this.isBoss) {
           prize += 1000 + this.floorNum * 50;
@@ -975,7 +961,7 @@ export class BattleScene extends Phaser.Scene {
         sfx(this, lvlMsg ? 'levelup' : 'coin');
         // ¿toca evolucionar? (se reproduce tras el mensaje de victoria)
         this.evoMon = mon; this.evoTarget = pendingEvolution(mon);
-        endMsg = `¡Has ganado! +${gain} EXP · +${coins}₽.${lvlMsg}`;
+        endMsg = `¡Has ganado! +${gain} EXP${idxs.length > 1 ? ` (×${idxs.length})` : ''} · +${coins}₽.${lvlMsg}`;
       } else endMsg = 'Tu equipo ha caído...';   // roguelike: fin de partida
 
       // guardar grabación (Videocámara) en todos los finales reales
@@ -983,8 +969,11 @@ export class BattleScene extends Phaser.Scene {
     }
     const lost = !this.replay && result === 'lose';
     // RESCATE DEL PC: si pierdes pero tienes algún Pokémon en la caja, uno sale a
-    // protegerte (en vez de Game Over). Ver pcRescue().
-    const canRescue = lost && !!this.run && (this.run.box?.length > 0);
+    // protegerte (en vez de Game Over). Ver pcRescue(). UNA SOLA VEZ POR PISO:
+    // si ya te rescataron en este piso, esta vez sí es Game Over.
+    if (this.run) this.run.rescuedFloors = this.run.rescuedFloors || [];
+    const alreadyRescued = !!this.run && this.run.rescuedFloors.includes(this.floorNum);
+    const canRescue = lost && !!this.run && (this.run.box?.length > 0) && !alreadyRescued;
     const proceed = () => {
       this.cameras.main.fadeOut(lost ? 600 : 300, 0, 0, 0);
       this.time.delayedCall(lost ? 620 : 320, () => {
@@ -1001,6 +990,45 @@ export class BattleScene extends Phaser.Scene {
         else proceed();
       });
     }, 900);
+  }
+
+  /** Da XP a UN Pokémon, sube niveles, aprende movimientos y (si no es el activo)
+   *  evoluciona en silencio. Devuelve el texto de subidas para el mensaje final.
+   *  interactive=true → el activo encola aprendizajes para el menú con sprite. */
+  _gainExp(mon, gain, need, interactive) {
+    mon.exp = (mon.exp || 0) + gain;
+    let lvlMsg = '', learnMsg = '';
+    while (mon.exp >= need(mon.level) && mon.level < 100) {
+      mon.exp -= need(mon.level);
+      mon.level++;
+      const ns = computeStats({ base: mon.base, level: mon.level, nature: mon.nature, ivs: mon.ivs, evs: mon.evs });
+      mon.hp = Math.min(ns.hp, mon.hp + Math.max(0, ns.hp - mon.maxhp));
+      mon.stats = ns; mon.maxhp = ns.hp;
+      lvlMsg = ` ¡${mon.name.toUpperCase()} subió al Nv ${mon.level}!`;
+      let mv, guard = 0;
+      while ((mv = nextLearnableMove(mon)) && guard++ < 4) {
+        if (mon.moves.length < 4) {
+          mon.moves.push(mv); if (mon.pp) mon.pp[mv] = MOVES[mv].pp;
+          learnMsg += ` ¡${mon.name.toUpperCase()} aprendió ${MOVES[mv].name}!`;
+        } else if (interactive) {
+          if (!this.pendingLearns.some(p => p.mon === mon && p.move === mv)) this.pendingLearns.push({ mon, move: mv });
+          break;   // se resuelve con menú tras la victoria
+        } else {
+          // no activo: reemplaza el más débil si el nuevo es mejor (sin menú)
+          const weakest = mon.moves.reduce((a, b) => (MOVES[a]?.power || 0) <= (MOVES[b]?.power || 0) ? a : b);
+          if ((MOVES[mv]?.power || 0) > (MOVES[weakest]?.power || 0)) {
+            if (mon.pp) { delete mon.pp[weakest]; mon.pp[mv] = MOVES[mv].pp; }
+            mon.moves[mon.moves.indexOf(weakest)] = mv;
+          }
+        }
+      }
+    }
+    // evolución silenciosa para los del banquillo (el activo evoluciona con animación)
+    if (!interactive) {
+      let evo, g = 0;
+      while ((evo = pendingEvolution(mon)) && g++ < 6) evolveMon(mon, evo);
+    }
+    return lvlMsg + learnMsg;
   }
 
   /** Procesa la cola de movimientos por aprender, uno a uno, con menú. */
@@ -1087,6 +1115,9 @@ export class BattleScene extends Phaser.Scene {
    *  aleatorio: su pokébola llega desde el PC, emerge, va a buscarte y te protege
    *  de un golpe poniéndose delante de ti. Luego se une al equipo y vuelves al piso. */
   pcRescue() {
+    // marca este piso como "ya rescatado" para que no se repita el rescate aquí.
+    this.run.rescuedFloors = this.run.rescuedFloors || [];
+    if (!this.run.rescuedFloors.includes(this.floorNum)) this.run.rescuedFloors.push(this.floorNum);
     const box = this.run.box;
     const pick = Phaser.Math.Between(0, box.length - 1);
     const mon = box[pick];

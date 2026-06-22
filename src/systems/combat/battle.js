@@ -53,6 +53,9 @@ export class Battle {
       A: Math.max(0, teamA.findIndex(m => m.hp > 0)),
       B: Math.max(0, teamB.findIndex(m => m.hp > 0)),
     };
+    // PARTICIPANTES (lado A): índices de party que han salido al campo. Sirve para
+    // repartir XP por igual a todos los que combatieron (no solo el activo final).
+    this.participated = new Set([this.active.A]);
     this.rng = makeRNG(seed);
     this.aiStyle = aiStyle;  // 'wild' | 'aggressive' | 'defensive' | 'smart'
     this.turn = 0;
@@ -339,6 +342,7 @@ export class Battle {
     if (out.ability === 'natural-cure' && out.status) out.status = null;   // se cura al retirarse
     this._revertOne(out);   // la transformación de Ditto se deshace al cambiar
     this.active[side] = index;
+    if (side === 'A') this.participated.add(index);
     const m = this.mon(side);
     this.log.push({ t: 'switchIn', side, name: m.name, speciesId: m.speciesId, hp: m.hp, maxhp: m.maxhp, ball: m.ball });
     this.triggerSwitchIn(side);
@@ -532,6 +536,7 @@ export class Battle {
     if (next === -1) { this.over = true; this.winner = this.foeSide(side); this.result = this.winner === 'A' ? 'win' : 'lose'; this.log.push({ t: 'end', winner: this.winner, result: this.result }); this._revertTransforms(); }
     else {
       this.active[side] = next;
+      if (side === 'A') this.participated.add(next);
       const nm2 = this.teams[side][next];
       this.log.push({ t: 'switch', side, name: nm2.name, speciesId: nm2.speciesId, hp: nm2.hp, maxhp: nm2.maxhp, ball: nm2.ball });
       this.triggerSwitchIn(side);

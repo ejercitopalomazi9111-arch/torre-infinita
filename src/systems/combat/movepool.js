@@ -37,10 +37,17 @@ export function learnPool(types) {
 export function nextLearnableMove(mon) {
   const pool = learnPool(mon.types || []);
   const known = new Set(mon.moves);
+  // MEMORIA anti-bucle: cada movimiento se ofrece UNA sola vez. Sin esto, al
+  // reemplazar A por B el movimiento A "vuelve a faltar" y se re-ofrecía sin fin
+  // (A→B→A→…). Se siembra con los movimientos iniciales para no re-ofrecerlos si
+  // luego se olvidan.
+  if (!mon._learnSeen) mon._learnSeen = [...(mon.moves || [])];
+  const seen = new Set(mon._learnSeen);
   for (let i = 0; i < pool.length; i++) {
-    if (known.has(pool[i])) continue;
+    const id = pool[i];
+    if (known.has(id) || seen.has(id)) continue;
     const unlockLvl = 1 + i * 3;             // pos0→Nv1, pos1→Nv4, pos2→Nv7…
-    if ((mon.level || 1) >= unlockLvl) return pool[i];
+    if ((mon.level || 1) >= unlockLvl) { mon._learnSeen.push(id); return id; }
   }
   return null;
 }
