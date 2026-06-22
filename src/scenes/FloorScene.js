@@ -1204,8 +1204,11 @@ export class FloorScene extends Phaser.Scene {
     if (this.floor.isSafeFloor || room.type === 'entrance' || this.floorNum < 3) return;
     const rng = makeRNG(`${this.floor.seed}:tr:${room.id}`);
     if (rng.float() > 0.3) return;
+    // colocar FUERA de los corredores de las puertas (#17): así podemos bloquear su
+    // casilla sin riesgo de taponar un camino y dejar una sala inalcanzable.
+    const corridor = this.doorSafeTiles(room);
     let c = 0, r = 0, ok = false;
-    for (let t = 0; t < 20 && !ok; t++) { c = 2 + Math.floor(rng.float() * (COLS - 4)); r = 2 + Math.floor(rng.float() * (ROWS - 4)); ok = tm.cells[r]?.[c]?.base === 'floor' && !tm.cells[r][c].blocked && !(Math.abs(c - 7) <= 1 && Math.abs(r - 5) <= 1); }
+    for (let t = 0; t < 24 && !ok; t++) { c = 2 + Math.floor(rng.float() * (COLS - 4)); r = 2 + Math.floor(rng.float() * (ROWS - 4)); ok = tm.cells[r]?.[c]?.base === 'floor' && !tm.cells[r][c].blocked && !corridor.has(c + ',' + r) && !(Math.abs(c - 7) <= 1 && Math.abs(r - 5) <= 1); }
     if (!ok) return;
     const dir = ['up', 'down', 'left', 'right'][Math.floor(rng.float() * 4)];
     const key = `tr:${this.floorNum}:${room.id}`;
@@ -1218,8 +1221,9 @@ export class FloorScene extends Phaser.Scene {
     if (OWMETA[owId] && this.textures.exists('ow_' + owId)) { sprite = this.add.sprite(pos.x, pos.y, 'ow_' + owId, ({ down: 0, up: 1, side: 2 })[this.animDir(dir)]).setOrigin(0.5, 0.8).setScale(2); if (dir === 'left') sprite.setFlipX(true); }
     else sprite = this.add.image(pos.x, pos.y, 'trainer_red').setOrigin(0.5, 0.8).setDisplaySize(26, 30);
     sprite.setDepth(50 + pos.y); this.worldLayer.add(sprite);
-    // NO bloquear la casilla: si un entrenador tapara un corredor del camino, ni la
-    // IA ni el jugador podrían pasar. Su LÍNEA DE VISIÓN es lo que te reta.
+    // COLISIÓN (#17): el entrenador bloquea su casilla (ya está fuera de corredores,
+    // así que no atrapa caminos). Además de su LÍNEA DE VISIÓN que te reta.
+    tm.cells[r][c].blocked = true;
     if (beaten) sprite.setTint(0x888888).setAlpha(0.75);
     this.tweens.add({ targets: sprite, y: pos.y - 2, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     this.trainers.push({ c, r, dir, sprite, key, beaten });
