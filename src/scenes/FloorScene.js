@@ -1627,10 +1627,15 @@ export class FloorScene extends Phaser.Scene {
       sfx(this, 'select', 0.5);
       const tex = this.textures.exists('item_bici') ? 'item_bici' : (this.textures.exists('item_bicycle') ? 'item_bicycle' : 'item_pokeball');
       if (!this.bikeSprite || !this.bikeSprite.active) this.bikeSprite = this.add.image(this.player.x, this.player.y + 7, tex).setScale(1.2);
-      this.bikeSprite.setVisible(true);
+      this.bikeSprite.setVisible(true).setAngle(0);
+      // PEDALEO: balanceo continuo (la rotación sobrevive al re-posicionado por frame de
+      // updateDepths). Da sensación de moverse en bici sin necesitar una hoja de sprites.
+      this.bikeWobble?.remove();
+      this.bikeWobble = this.tweens.add({ targets: this.bikeSprite, angle: { from: -5, to: 5 }, duration: 200, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
       this.toast('🚲 ¡En la bici! Vas más rápido (úsala otra vez para bajar).');
     } else {
-      this.bikeSprite?.setVisible(false);
+      this.bikeWobble?.remove(); this.bikeWobble = null;
+      this.bikeSprite?.setVisible(false).setAngle(0);
       this.toast('Te bajaste de la bici.');
     }
   }
