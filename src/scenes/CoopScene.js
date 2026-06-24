@@ -120,8 +120,10 @@ export class CoopScene extends Phaser.Scene {
       if (chibi) { this.ensureOwAnims(trId); sprite = this.add.sprite(p.x, p.y, 'ow_' + trId, 0).setScale(2); }
       else sprite = this.add.image(p.x, p.y, this.textures.exists('ow_' + trId) ? 'ow_' + trId : (this.textures.exists('trainer_' + trId) ? 'trainer_' + trId : 'trainer_red'));
       sprite.setOrigin(0.5, 0.8).setDepth(60 + p.y);
-      this.world.add([ring, sprite]);
-      this.players.push({ idx: i, c, r, input, sprite, ring, trId, chibi, facing: 'down', stepping: false, moveT: 0, catches: 0, color: COLORS[i], onPortal: false });
+      // etiqueta de jugador (P1/P2/...) en su color, para identificarse en split-screen
+      const tag = this.add.text(p.x, p.y - 26, PNAME[i], { fontFamily: '"Press Start 2P"', fontSize: '7px', color: '#' + COLORS[i].toString(16).padStart(6, '0'), stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(90 + p.y);
+      this.world.add([ring, sprite, tag]);
+      this.players.push({ idx: i, c, r, input, sprite, ring, tag, trId, chibi, facing: 'down', stepping: false, moveT: 0, catches: 0, color: COLORS[i], onPortal: false });
     }
   }
 
@@ -171,7 +173,7 @@ export class CoopScene extends Phaser.Scene {
     // cada cámara de juego ignora el HUD; la de UI ignora el mundo
     this.pcams.forEach(cam => cam.ignore(this.hud));
     this.uiCam.ignore(this.world);
-    this.uiCam.ignore(this.players.flatMap(p => [p.sprite, p.ring]));
+    this.uiCam.ignore(this.players.flatMap(p => [p.sprite, p.ring, p.tag]));
     this.refreshHud();
   }
 
@@ -205,7 +207,8 @@ export class CoopScene extends Phaser.Scene {
     if (pl.chibi) { const key = `cow${pl.trId}_${this.animDir(d)}`; if (this.anims.exists(key)) { pl.sprite.play(key, true); pl.sprite.anims.timeScale = running ? 1.7 : 1; } }
     this.tweens.add({ targets: pl.sprite, x: p.x, y: p.y, duration: dur, ease: 'Linear', onComplete: () => { pl.stepping = false; this.afterStep(pl); } });
     this.tweens.add({ targets: pl.ring, x: p.x, y: p.y + 11, duration: dur, ease: 'Linear' });
-    pl.sprite.setDepth(60 + p.y); pl.ring.setDepth(48 + p.y);
+    this.tweens.add({ targets: pl.tag, x: p.x, y: p.y - 26, duration: dur, ease: 'Linear' });
+    pl.sprite.setDepth(60 + p.y); pl.ring.setDepth(48 + p.y); pl.tag.setDepth(90 + p.y);
   }
 
   afterStep(pl) {
