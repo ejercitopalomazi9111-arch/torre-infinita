@@ -78,6 +78,7 @@ export class FloorScene extends Phaser.Scene {
     // a objetos del piso anterior (ya destruidos) o create() truena (piso 2 negro)
     this.hud = null; this.bagUI = null; this.teamUI = null; this.shopUI = null;
     this.props = []; this.pickups = []; this.followers = []; this.npcs = []; this.ponds = []; this.trainers = [];
+    this.townDoors = [];   // puertas de edificios del pueblo: pisarlas (o A de frente) → entrar
     this.fishing = false;   // reset: si no, un cambio de escena durante la pesca lo dejaba trabado
     this.biking = false; this.bikeSprite = null;   // te bajas de la bici al cambiar de piso
     this.roamers = [];   // Pokémon corredores visibles (tocarlos = combate)
@@ -317,14 +318,27 @@ export class FloorScene extends Phaser.Scene {
     const safe = this.doorSafeTiles(room);
     this._corridor = safe;   // corredores de puerta: ni decoración ni NPCs los bloquean
     const mid = (COLS / 2) | 0;
-    // NADA de edificios (no funcionaban): el servicio lo da una PERSONA a la que hablas.
-    if (['shop', 'pokecenter', 'rest'].includes(room.type)) {
-      const id = OWMETA[SERVICE_NPC[room.type]] ? SERVICE_NPC[room.type] : (POOL[0] || 'red');
-      this.spawnNpc(mid, 3, id, room.type, SERVICE_LINE[room.type]);
+    // EDIFICIOS REALES con PUERTA (Carlos: "las casas no se pueden entrar"): se vuelven
+    // a poner, pero ahora cada uno tiene una puerta que SÍ entra a su interior real
+    // (InteriorScene: caminas al mostrador y pulsas A). Anclados arriba (filas 1-3),
+    // lejos del cruce central (7,5) y de la puerta N (col 7) → sin softlocks.
+    const BLD = { pokecenter: 'center', shop: 'mart', rest: 'house_a' };
+    const LBL = { pokecenter: 'CENTRO', shop: 'TIENDA', rest: 'POSADA' };
+    if (BLD[room.type]) {
+      this.placeEnterableBuilding(4, 2, BLD[room.type], room.type, safe, LBL[room.type]);
+    } else {
+      // pueblo sin servicio asignado: igual ponemos un Centro para curar (siempre útil)
+      this.placeEnterableBuilding(4, 2, 'center', 'pokecenter', safe, 'CENTRO');
     }
+    // CASAS decorativas que TAMBIÉN se pueden entrar (villano amable da una pista).
+    const HOUSES = ['house_b', 'house_c', 'house_d', 'gym'];
+    const hk1 = HOUSES[Math.floor(rng.float() * HOUSES.length)];
+    const hk2 = HOUSES[Math.floor(rng.float() * HOUSES.length)];
+    this.placeEnterableBuilding(10, 2, hk1, 'house', safe, 'CASA');
+    this.placeEnterableBuilding(12, 3, hk2, 'house', safe, 'CASA');
     // relleno visual del pueblo: piedras, flores y arbustos por el suelo (no bloquean
-    // el centro/corredores) para que las salas no se vean vacías ahora sin edificios.
-    this.scatterDecor(rng, 10 + Math.floor(rng.float() * 8));
+    // el centro/corredores) para que las salas no se vean vacías.
+    this.scatterDecor(rng, 8 + Math.floor(rng.float() * 6));
     // CLUB DE BATALLA ONLINE — en CADA pueblo hay un encargado que abre el modo
     // online P2P (comerciar / PVP con un amigo por código de sala). Se le habla con A.
     let clubCell = this.freeTownCell(rng);
@@ -426,6 +440,27 @@ export class FloorScene extends Phaser.Scene {
     }
     this.props.push(img);
     return img;
+  }
+
+  /** Edificio del pueblo con PUERTA real: coloca el edificio, deja LIBRE la casilla
+   *  base-centro (la puerta) y la de enfrente, y la registra para que al pisarla
+   *  (o pulsar A de frente) se entre a su interior (InteriorScene / 'house'). */
+  placeEnterableBuilding(centerCol, baseRow, key, kind, protect, label) {
+    const img = this.placeBuilding(centerCol, baseRow, key, protect);
+    if (!img) return false;
+    const dc = centerCol, dr = baseRow;
+    // PUERTA y casilla de aproximación: transitables sí o sí (si no, no se entra)
+    if (this.tilemap?.cells?.[dr]?.[dc]) { this.tilemap.cells[dr][dc].blocked = false; this.tilemap.cells[dr][dc].decor = true; }
+    if (this.tilemap?.cells?.[dr + 1]?.[dc]) this.tilemap.cells[dr + 1][dc].blocked = false;
+    this.townDoors.push({ c: dc, r: dr, kind });
+    const pos = this.tileCenter(dc, dr);
+    // felpudo + brillo de puerta para que se vea "entrable"
+    const mat = this.add.rectangle(pos.x, pos.y + 7, 22, 9, 0xffd76a, 0.85).setStrokeStyle(1, 0x05060a).setDepth(47);
+    this.worldLayer.add(mat); this.props.push(mat);
+    const lt = this.add.text(pos.x, pos.y - 40, label, { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#ffd76a', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(90 + pos.y);
+    this.worldLayer.add(lt); this.props.push(lt);
+    this.tweens.add({ targets: mat, alpha: 0.45, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    return true;
   }
 
   /** Esparce DECORACIÓN de suelo (piedras, hojas, arbustos) que NO bloquea el paso,
@@ -916,6 +951,16 @@ export class FloorScene extends Phaser.Scene {
     }
     // ---- IA AUTÓNOMA: si está activa, el bot conduce (explora, recoge, baja) ----
     if (this.registry.get('autoplay') && !this.bagUI && !this.teamUI && !this.shopUI && !this.transitioning && !this.fishing) {
+      // SALIDA HUMANA: si NO es el modo dios y el jugador toca CUALQUIER control,
+      // recupera el mando al instante (apaga la IA). Evita el "se trabó": antes,
+      // la IA solo se apagaba con I porque R/E quedaba detrás del return de abajo.
+      if (!this.registry.get('godtest') &&
+          (this.gba.dirJust() || this.gba.justDown('R') || this.gba.justDown('A') ||
+           this.gba.justDown('B') || this.gba.justDown('L') || this.gba.justDown('START') ||
+           this.gba.justDown('TRI') || this.gba.justDown('SQR') || this.gba.justDown('SELECT'))) {
+        this.toggleAuto();   // apaga la IA; el siguiente toque ya es control humano normal
+        return;
+      }
       this.updateDepths();
       if (this.registry.get('godtest')) {
         // MODO DIOS TESTER: turbo — muchos pasos INSTANTÁNEOS por frame (≈x500)
@@ -949,9 +994,11 @@ export class FloorScene extends Phaser.Scene {
         this.pickups = this.pickups.filter(p => p !== pk);
         saveRun(this.registry, this.floorNum);
       } else {
+        const door = this.townDoors?.find(d => d.c === this.col + fdx && d.r === this.row + fdy);
         const pond = this.ponds?.find(q => q.c === this.col + fdx && q.r === this.row + fdy);
-        if (pond) this.fish(pond);          // ¿charco enfrente? → PESCAR
-        else this.talkToNpc();              // ¿hay un NPC del pueblo enfrente? → hablar
+        if (door) this.enterBuilding(door.kind);   // ¿puerta de un edificio enfrente? → entrar
+        else if (pond) this.fish(pond);            // ¿charco enfrente? → PESCAR
+        else this.talkToNpc();                     // ¿hay un NPC del pueblo enfrente? → hablar
       }
     }
     this.updateDepths();
@@ -1454,6 +1501,7 @@ export class FloorScene extends Phaser.Scene {
   /** Entra al interior real del edificio (Centro/Mart/Posada). */
   enterBuilding(kind) {
     if (this.transitioning) return;
+    if (this.registry.get('godtest')) return;   // tester: no entra a edificios (evita trabar al bot)
     this.transitioning = true;
     this.cameras.main.fadeOut(200, 0, 0, 0);
     // CLUB DE BATALLA ONLINE: no es un interior, es el modo P2P (comercio / PVP).
@@ -1664,7 +1712,7 @@ export class FloorScene extends Phaser.Scene {
   toggleAuto() {
     const on = !this.registry.get('autoplay');
     this.registry.set('autoplay', on);
-    this.toast(on ? '🤖 IA ACTIVADA: juega sola (I para parar)' : 'IA desactivada.');
+    this.toast(on ? '🤖 IA ACTIVADA: juega sola · muévete o R/E/I para retomar' : 'IA desactivada: tú tienes el mando.');
     if (!this.autoTag) this.autoTag = this.add.text(VIEW.w - 4, 22, '', { fontFamily: '"Press Start 2P"', fontSize: '7px', color: '#54e0c8' }).setOrigin(1, 0).setScrollFactor(0).setDepth(99999);
     this.autoTag.setText(on ? '🤖 IA' : '').setVisible(on);
   }
@@ -1920,6 +1968,11 @@ export class FloorScene extends Phaser.Scene {
     if (this.holeTile && this.col === this.holeTile.c && this.row === this.holeTile.r) return this.descend();
     // ¿servicio de zona segura?
     if (this.serviceTile && this.col === this.serviceTile.c && this.row === this.serviceTile.r) this.useService(this.serviceTile.type);
+    // ¿pisaste la PUERTA de un edificio del pueblo? → entrar a su interior
+    if (this.townDoors?.length && !this.transitioning) {
+      const door = this.townDoors.find(d => d.c === this.col && d.r === this.row);
+      if (door) return this.enterBuilding(door.kind);
+    }
     // pisar hierba alta: rustle (sonido + aplastón), aunque no salga encuentro
     const here = this.tilemap?.cells?.[this.row]?.[this.col];
     if (here?.tall) this.rustleGrass(this.col, this.row);
@@ -2002,9 +2055,22 @@ export class FloorScene extends Phaser.Scene {
     this.scene.launch('Pokedex', { run: this.run, returnTo: 'Floor' });
   }
 
+  // COLA de avisos: solo UNO visible arriba a la vez; el resto espera su turno
+  // (antes se encimaban todos en y=40 y se volvía ilegible).
   toast(text) {
-    const tx = this.add.text(VIEW.w / 2, 40, text, { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffd76a', backgroundColor: '#05060acc', padding: { x: 8, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(300001);
-    this.tweens.add({ targets: tx, alpha: 0, delay: 1200, duration: 500, onComplete: () => tx.destroy() });
+    this._toastQ = this._toastQ || [];
+    this._toastQ.push(text);
+    this._drainToast();
+  }
+  _drainToast() {
+    if (this._toastBusy || !this._toastQ || !this._toastQ.length) return;
+    this._toastBusy = true;
+    const text = this._toastQ.shift();
+    const tx = this.add.text(VIEW.w / 2, 40, text, { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffd76a', backgroundColor: '#05060acc', padding: { x: 8, y: 6 } }).setOrigin(0.5).setScrollFactor(0).setDepth(300001).setScale(0.92);
+    this.tweens.add({ targets: tx, scale: 1, duration: 110, ease: 'Back.out' });
+    // si hay backlog, acorta la estancia para no hacer esperar de más
+    const dwell = this._toastQ.length > 2 ? 550 : 1100;
+    this.tweens.add({ targets: tx, alpha: 0, delay: dwell, duration: 380, onComplete: () => { tx.destroy(); this._toastBusy = false; this._drainToast(); } });
   }
 
   // ---------- HUD ----------

@@ -28,9 +28,19 @@ const MAP = {
   hit:    '005C',    // Smack (golpe)
   error:  '0016',    // Error / False sound
   lowhp:  '0053',    // Low Health Alert (pitido de PS bajos)
-  ballthrow: '0036', // Throw Pokeball (lanzar pokébola)
-  ballopen:  '000F', // Pokeball Open (sale el Pokémon)
+  ballthrow: '0036', // Throw Pokeball (lanzar pokébola)   [SE_BALL_THROW=54]
+  ballopen:  '000F', // Pokeball Open (sale el Pokémon)     [SE_BALL_OPEN=15]
   save:   '0030',    // Save (guardar)
+  // --- NUEVOS (verificados en pret/pokefirered include/constants/songs.h) ---
+  balldrop:  '0031', // Pokeball Bounce 1 (la bola cae/rebota al suelo) [SE_BALL_BOUNCE_1=49]
+  ballshake: '0032', // Pokeball Bounce 2 (rebote más suave, forcejeo)  [SE_BALL_BOUNCE_2=50]
+  ballclick: '00F7', // Pokeball Click (¡CAPTURA exitosa! el cierre)    [SE_BALL_CLICK=247]
+  flee:      '0011', // Flee (se escapó / huyó)                          [SE_FLEE=17]
+  faint:     '0010', // Faint (Pokémon debilitado)                       [SE_FAINT=16]
+  hitweak:   '000C', // No es muy eficaz                                 [SE_NOT_EFFECTIVE=12]
+  hitok:     '000D', // Eficaz (golpe normal)                            [SE_EFFECTIVE=13]
+  hitsuper:  '000E', // ¡Súper eficaz!                                   [SE_SUPER_EFFECTIVE=14]
+  exp:       '001B', // Barra de experiencia                             [SE_EXP=27]
 };
 
 const tmp = join(tmpdir(), 'frlg_sfx_' + Date.now());

@@ -2,7 +2,10 @@
 // (Sounds Resource, tools/fetch-sfx-firered.mjs) + cries REALES de Pokémon.
 
 // claves de SFX cargadas en BootScene (assets/audio/sfx/<key>.wav)
-export const SFX_KEYS = ['cursor', 'select', 'back', 'coin', 'heal', 'levelup', 'evolve', 'hit', 'error', 'lowhp', 'ballthrow', 'ballopen', 'save', 'grass'];
+export const SFX_KEYS = ['cursor', 'select', 'back', 'coin', 'heal', 'levelup', 'evolve', 'hit', 'error', 'lowhp', 'ballthrow', 'ballopen', 'save', 'grass',
+  // SFX de combate añadidos (FireRed reales): rebote de bola, forcejeo, captura,
+  // huida, debilitado, golpes por eficacia, barra de experiencia.
+  'balldrop', 'ballshake', 'ballclick', 'flee', 'faint', 'hitweak', 'hitok', 'hitsuper', 'exp'];
 
 // claves de BGM REAL de FireRed/LeafGreen (assets/audio/bgm/<key>.mp3, tools/fetch-firered.mjs).
 // Exploración por bioma (data/biomes.js → music) + combate + pantallas.
@@ -11,7 +14,8 @@ export const BGM_KEYS = [
   'explore', 'town', 'battle', 'boss', 'replay', 'legendary', 'title', 'victory', 'evolve',
 ];
 
-const SFX_VOL = { cursor: 0.3, select: 0.35, back: 0.3, coin: 0.45, heal: 0.5, levelup: 0.55, evolve: 0.6, hit: 0.45, error: 0.4, lowhp: 0.4, ballthrow: 0.5, ballopen: 0.5, save: 0.4, grass: 0.4 };
+const SFX_VOL = { cursor: 0.3, select: 0.35, back: 0.3, coin: 0.45, heal: 0.5, levelup: 0.55, evolve: 0.6, hit: 0.45, error: 0.4, lowhp: 0.4, ballthrow: 0.5, ballopen: 0.5, save: 0.4, grass: 0.4,
+  balldrop: 0.5, ballshake: 0.45, ballclick: 0.6, flee: 0.5, faint: 0.5, hitweak: 0.4, hitok: 0.45, hitsuper: 0.55, exp: 0.4 };
 
 // ---- VOLUMEN global (ajustes, persisten en localStorage) ----
 const SET_KEY = 'torre_infinita_settings';

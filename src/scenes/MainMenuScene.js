@@ -87,12 +87,40 @@ export class MainMenuScene extends Phaser.Scene {
       { label: 'NUEVA PARTIDA', onPick: () => this.showSlots('new') },
       { label: 'CARGAR PARTIDA', onPick: () => this.showSlots('load') },
       { label: 'CO-OP LOCAL', onPick: () => this.showCoop() },
+      { label: 'ONLINE (INTERNET)', onPick: () => this.showOnline() },
       { label: 'REPETICIONES', onPick: () => { this.scene.launch('Pokedex', { run: { dex: { seen: [], caught: [] } }, mode: 'rec', returnTo: 'MainMenu' }); this.scene.pause(); } },
       { label: 'MEJORAS', onPick: () => this.showPerks() },
       { label: 'LOGROS', onPick: () => this.showAchievements() },
       { label: 'AJUSTES', onPick: () => this.showSettings() },
       { label: 'CRÉDITOS', onPick: () => this.showCredits() },
     ]);
+  }
+
+  // ONLINE desde el MENÚ (no hay que entrar a un pueblo ni tocar un NPC → sin trabas).
+  // Carga tu partida para tener equipo y abre el Club de Batalla (hospedar/unirse,
+  // comerciar o PVP). Al salir, vuelve aquí.
+  showOnline() {
+    this.state = 'online';
+    const slots = listSlots();
+    const have = slots.map((m, i) => ({ m, i })).filter(s => s.m);
+    if (!have.length) {
+      return this.flashMsg('Primero empieza o carga una partida\n(necesitas un equipo para jugar online)', () => this.showMain());
+    }
+    // elige con qué partida entrar (su equipo es el que usarás para comerciar/luchar)
+    const items = have.map(({ m, i }) => ({
+      label: `${STARTER_NAME[m.starter] || 'Equipo'} · Piso ${m.floor}`,
+      color: '#e8f6ff',
+      onPick: () => {
+        const fl = loadRun(this.registry, i);
+        if (!fl) return sfx(this, 'error');
+        this.registry.set('floorNum', fl);
+        sfx(this, 'select');
+        this.scene.launch('Online', { returnTo: 'MainMenu' });
+        this.scene.pause();
+      },
+    }));
+    items.push({ label: '← Atrás', color: '#9fb0d0', onPick: () => this.showMain() });
+    this.list('ONLINE — ¿con qué partida?', items, 'Hospeda y comparte tu código, o únete al de un amigo · P2P');
   }
 
   showCoop() {

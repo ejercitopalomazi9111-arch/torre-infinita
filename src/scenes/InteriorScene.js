@@ -7,9 +7,18 @@ import { makeInput } from '../systems/input.js';
 import { sfx } from '../systems/audio.js';
 import { OWMETA } from '../../data/owmeta.generated.js';
 
-const IMG = { pokecenter: 'int_center', rest: 'int_center', shop: 'int_mart' };
-const TITLE = { pokecenter: 'CENTRO POKéMON', rest: 'POSADA', shop: 'POKé MART' };
-const CLERK = { pokecenter: 'lyra', rest: 'serena', shop: 'wattson' };
+const IMG = { pokecenter: 'int_center', rest: 'int_center', shop: 'int_mart', house: 'int_center' };
+const TITLE = { pokecenter: 'CENTRO POKéMON', rest: 'POSADA', shop: 'POKé MART', house: 'CASA' };
+const CLERK = { pokecenter: 'lyra', rest: 'serena', shop: 'wattson', house: 'may' };
+// pistas/charla del vecino al entrar a una CASA decorativa (sin efecto mecánico)
+const HOUSE_TIPS = [
+  '"¡Bienvenido a mi casa! Equipa una CORREA y tu Pokémon te seguirá afuera."',
+  '"Dicen que cada 50 pisos despierta un GUARDIÁN de la Torre... ten cuidado."',
+  '"En la tienda venden discos para enseñar habilidades. ¡Échales ojo!"',
+  '"Si todo tu equipo cae y tienes Pokémon en el PC, uno saldrá a rescatarte."',
+  '"Descansa en el Centro antes de seguir subiendo, viajero."',
+  '"Las bayas se activan solas en combate cuando tu Pokémon lo necesita."',
+];
 const SPEED = 0.14;   // px por ms
 
 export class InteriorScene extends Phaser.Scene {
@@ -99,6 +108,11 @@ export class InteriorScene extends Phaser.Scene {
 
   service() {
     const run = this.run;
+    if (this.kind === 'house') {
+      // CASA decorativa: el vecino te saluda y suelta una pista (sin truco mecánico)
+      this.toast(HOUSE_TIPS[Math.floor(Math.random() * HOUSE_TIPS.length)]);
+      return;
+    }
     if (this.kind === 'shop') {
       // reutiliza la tienda del piso (mismo surtido/UI): vuelve y la abre
       this.registry.set('pendingShop', true);

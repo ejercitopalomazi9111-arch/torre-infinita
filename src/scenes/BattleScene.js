@@ -107,9 +107,16 @@ export class BattleScene extends Phaser.Scene {
   create() {
     frameCamera(this);
     const { w, h } = VIEW;
-    // MÚSICA por contexto: repetición / jefe / combate normal (antes sonaba la
-    // de exploración en todo el juego porque ninguna escena la cambiaba).
-    playBgm(this, this.replay ? 'bgm_replay' : this.isLegendary ? 'bgm_legendary' : this.isBoss ? 'bgm_boss' : 'bgm_battle', 0.32);
+    // MÚSICA por contexto: repetición / leyenda / guardián / jefe / ENTRENADOR / salvaje.
+    // (El tema "Battle! Trainer" antes solo sonaba en repeticiones; ahora los
+    //  combates de entrenador lo usan → más variedad musical real en partida.)
+    const battleBgm = this.replay ? 'bgm_replay'
+      : this.isLegendary ? 'bgm_legendary'
+      : this.isGuardian ? 'bgm_legendary'
+      : this.isBoss ? 'bgm_boss'
+      : this.isTrainer ? 'bgm_replay'
+      : 'bgm_battle';
+    playBgm(this, battleBgm, 0.32);
     // fondo: degradado con tinte del bioma
     const pal = this.biome?.palette || { wall: '#26323a', floor: '#3f5a66' };
     const top = Phaser.Display.Color.HexStringToColor(pal.floor);
@@ -685,7 +692,10 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'damage': {
         const p = panelFor(e.target), s = spriteFor(e.target);
+        // golpe base + matiz por EFICACIA (sonidos reales de FireRed): así cada
+        // ataque "suena" distinto según pegue fuerte, flojo o normal.
         sfx(this, 'hit', e.crit ? 0.55 : 0.4);
+        if (e.eff > 1) sfx(this, 'hitsuper'); else if (e.eff > 0 && e.eff < 1) sfx(this, 'hitweak'); else if (e.eff !== 0) sfx(this, 'hitok', 0.35);
         this.cameras.main.shake(120, e.crit ? 0.012 : 0.006);
         this.tweens.add({ targets: s, alpha: 0.2, duration: 60, yoyo: true, repeat: 2 });
         this.popDamage(s.x, s.y, e.amount, e.crit);
@@ -698,7 +708,7 @@ export class BattleScene extends Phaser.Scene {
       case 'status': return this.showMessage(`¡${this.statusName(e.status)}!`, done, 380);
       case 'stat': { playStatFX(this, spriteFor(e.side), e.stages > 0); return this.time.delayedCall(420, done); }
       case 'chip': { const p = panelFor(e.side); this.animateHp(p, e.hp); return this.showMessage(`Sufre daño de ${e.reason}.`, done, 380); }
-      case 'faint': { const s = spriteFor(e.side); this.stopIdle(s); this.faintAnim(s, e.side); return this.showMessage(`¡${e.name.toUpperCase()} se debilitó!`, done, 600); }
+      case 'faint': { const s = spriteFor(e.side); sfx(this, 'faint'); this.stopIdle(s); this.faintAnim(s, e.side); return this.showMessage(`¡${e.name.toUpperCase()} se debilitó!`, done, 600); }
       case 'switch': {
         // cambio: usar LOS DATOS DEL EVENTO (e), no el estado final del turno.
         const s = spriteFor(e.side);
@@ -742,6 +752,8 @@ export class BattleScene extends Phaser.Scene {
       case 'catchfail': return this.wobbleBall(e.shakes, () => {
         const ball = this.activeBall;
         if (ball) { this.tweens.add({ targets: ball, alpha: 0, scale: 2.2, duration: 180, onComplete: () => ball.destroy() }); this.activeBall = null; }
+        sfx(this, 'ballopen', 0.55);   // la bola se abre de golpe...
+        sfx(this, 'flee');             // ...¡y se escapa!
         this.enemySprite.setPosition(VIEW.w - 110, 128).setScale(0.05).setAlpha(1);
         this.tweens.add({ targets: this.enemySprite, scale: 1.4, duration: 240, ease: 'Back.out', onComplete: () => this.startIdle(this.enemySprite, 1.4) });
         const msg = ['¡Oh, no! ¡Se ha escapado!', '¡Casi! ¡Estuvo cerca!', '¡Ahh! ¡Faltó muy poco!'][Math.min(2, e.shakes)];
@@ -749,12 +761,14 @@ export class BattleScene extends Phaser.Scene {
       });
       case 'caught': return this.wobbleBall(3, () => {
         const ball = this.activeBall;
+        sfx(this, 'ballclick');   // ¡CLIC! la bola se cierra: captura confirmada
         this.cameras.main.flash(160, 255, 230, 140);
         if (ball) this.tweens.add({ targets: ball, scaleX: 1.7, scaleY: 1.2, duration: 120, yoyo: true });
+        this.time.delayedCall(380, () => sfx(this, 'levelup'));   // jingle de captura
         this.checkAch('capture');
         this.showMessage(`¡${e.name.toUpperCase()} fue capturado!`, done, 900);
       });
-      case 'run': return this.showMessage('¡Escapaste sin problemas!', done, 500);
+      case 'run': sfx(this, 'flee'); return this.showMessage('¡Escapaste sin problemas!', done, 500);
       case 'runfail': return this.showMessage('¡No pudiste escapar!', done, 450);
       case 'switchIn': {
         this.stopIdle(this.playerSprite);
@@ -834,13 +848,16 @@ export class BattleScene extends Phaser.Scene {
     const ball = this.add.image(120, 226, this.textures.exists(tex) ? tex : 'pokeball').setScale(1.4).setDepth(360);
     this.stage.add(ball);
     this.activeBall = ball;
+    sfx(this, 'ballthrow', 0.55);   // ¡fiuu! se lanza la pokébola
     this.tweens.add({
       targets: ball, x: ex, y: ey - 6, duration: 420, ease: 'Quad.out', angle: 540,
       onComplete: () => {
+        sfx(this, 'ballopen', 0.5);   // la bola se abre y absorbe
         this.cameras.main.flash(120, 255, 255, 255);
         // el enemigo es absorbido por la ball
         this.tweens.add({ targets: this.enemySprite, x: ex, y: ey, scale: 0.05, alpha: 0, duration: 240 });
-        this.tweens.add({ targets: ball, y: ey + 12, angle: 0, duration: 220, delay: 230, ease: 'Bounce.out' });
+        this.tweens.add({ targets: ball, y: ey + 12, angle: 0, duration: 220, delay: 230, ease: 'Bounce.out',
+          onComplete: () => sfx(this, 'balldrop') });   // ...y CAE al suelo (toc)
       },
     });
   }
@@ -930,6 +947,7 @@ export class BattleScene extends Phaser.Scene {
     const one = () => {
       if (i >= times) { cb(); return; }
       i++;
+      sfx(this, 'ballshake');   // tic... tic... el forcejeo dentro de la bola
       this.tweens.add({ targets: ball, angle: { from: -16, to: 16 }, duration: 130, yoyo: true, ease: 'Sine.inOut', onComplete: () => this.time.delayedCall(140, one) });
     };
     this.time.delayedCall(500, one);

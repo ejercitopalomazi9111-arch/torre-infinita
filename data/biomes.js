@@ -91,7 +91,7 @@ export const BIOMES = [
     name: 'Pradera Encantada',
     palette: { wall: '#4a7a4a', floor: '#7fc06a', accent: '#ffb0e0' },
     grassTint: 0xd6ffb0,   // hierba lozana y clara de la pradera
-    music: 'bgm_sky',
+    music: 'bgm_explore',   // tema propio (Pallet Town, alegre) — ya no clona a "cielo"
     weather: ['none', 'none', 'sun'],
     typesFavored: ['fairy', 'grass', 'normal'],
     ambient: 'Flores que brillan suave y un aire dulce.',
