@@ -1,0 +1,16 @@
+import puppeteer from 'puppeteer';
+import { fileURLToPath } from 'node:url';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const OUT=fileURLToPath(new URL('../assets/_preview/story.png',import.meta.url));
+const b=await puppeteer.launch({headless:'new',args:['--no-sandbox','--disable-gpu']});
+const p=await b.newPage(); await p.setViewport({width:480,height:360,deviceScaleFactor:2});
+const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+await p.goto('http://localhost:5173/',{waitUntil:'domcontentloaded',timeout:30000});
+await p.waitForFunction(()=>window.__GAME,{timeout:60000});
+await p.waitForFunction(()=>window.__GAME.scene.getScenes(true).some(s=>s.scene.key!=='Boot'),{timeout:90000,polling:500});
+await sleep(600);
+await p.evaluate(()=>{const g=window.__GAME; g.registry.set('trainer',{id:'red'}); for(const s of g.scene.getScenes(true).slice()) g.scene.stop(s.scene.key); g.scene.start('Story');});
+await sleep(1800);
+await p.screenshot({path:OUT});
+console.log('shot',OUT,errs.length?'ERR:'+errs.join(';'):'ok');
+await b.close();

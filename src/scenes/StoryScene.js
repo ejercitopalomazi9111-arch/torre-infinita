@@ -68,11 +68,11 @@ export class StoryScene extends Phaser.Scene {
     this.add.image(60, 300, 'fx_rock1').setScale(0.8);
     this.add.image(w - 70, 296, 'fx_rock2').setScale(0.7);
 
-    // mantel de picnic + meriendas (sprites reales)
+    // mantel de picnic (textura gingham real) + meriendas
     this.picnic = this.add.container(0, 0);
-    for (let i = 0; i < 8; i++) {
-      this.picnic.add(this.add.rectangle(96 + (i % 4) * 18, 246 + Math.floor(i / 4) * 18, 18, 18, i % 2 ? 0xc03028 : 0xe8e0d0, 1));
-    }
+    const mat = this.add.image(123, 255, 'picnic_mat').setOrigin(0.5).setAngle(-5);
+    mat.setDisplaySize(84, 50);
+    this.picnic.add(mat);
     this.picnic.add(this.add.image(110, 244, 'item_oranberry').setScale(1.1));
     this.picnic.add(this.add.image(146, 262, 'item_potion').setScale(1));
 

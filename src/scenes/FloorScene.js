@@ -1331,10 +1331,12 @@ export class FloorScene extends Phaser.Scene {
   makeGrassBlade(c, r) {
     const pos = this.tileCenter(c, r);
     const baseY = pos.y + T / 2;
-    const g = this.add.image(pos.x, baseY, 'tallgrass').setOrigin(0.5, 1);   // sprite ya verde, fondo transparente
-    g.setDisplaySize(T, T * 0.8).setDepth(50 + baseY);   // y-sort: delante del jugador de su fila
+    const g = this.add.image(pos.x, baseY, 'tallgrass').setOrigin(0.5, 1);   // arbusto pixel-art recortado, fondo transparente
+    g.setDisplaySize(T * 1.08, T * 1.0).setDepth(50 + baseY);   // y-sort: delante del jugador de su fila; un pelín más grande para caminar ENTRE ella
+    if (this.biome?.grassTint && this.biome.grassTint !== 0xffffff) g.setTint(this.biome.grassTint);   // recolor por bioma (#23)
     g._baseSY = g.scaleY;
-    this.tweens.add({ targets: g, scaleX: g.scaleX * 1.06, duration: 700 + Math.random() * 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    // vaivén natural: cada mata desfasada para que el parche no se mueva al unísono
+    this.tweens.add({ targets: g, scaleX: g.scaleX * 1.06, angle: 1.5, duration: 700 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.inOut', delay: Math.random() * 500 });
     this.props.push(g);
     return g;
   }

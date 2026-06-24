@@ -20,6 +20,7 @@ export const BIOMES = [
     id: 'bosque',
     name: 'Bosque Susurrante',
     palette: { wall: '#23402a', floor: '#3f6b46', accent: '#9fd97f' },
+    grassTint: 0xffffff,   // hierba alta: verde natural del sprite
     music: 'bgm_forest',
     weather: ['none', 'rain', 'none'],
     typesFavored: ['grass', 'bug', 'poison'],
@@ -29,6 +30,7 @@ export const BIOMES = [
     id: 'ruinas',
     name: 'Ruinas Olvidadas',
     palette: { wall: '#4a4636', floor: '#726b50', accent: '#d8c98a' },
+    grassTint: 0xc9b06a,   // hierba reseca/amarillenta entre la piedra
     music: 'bgm_ruins',
     weather: ['none', 'sand', 'none'],
     typesFavored: ['ground', 'psychic', 'ghost'],
@@ -88,6 +90,7 @@ export const BIOMES = [
     id: 'pradera',
     name: 'Pradera Encantada',
     palette: { wall: '#4a7a4a', floor: '#7fc06a', accent: '#ffb0e0' },
+    grassTint: 0xd6ffb0,   // hierba lozana y clara de la pradera
     music: 'bgm_sky',
     weather: ['none', 'none', 'sun'],
     typesFavored: ['fairy', 'grass', 'normal'],

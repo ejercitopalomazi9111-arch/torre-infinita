@@ -6,7 +6,8 @@ import { VIEW, frameCamera } from '../main.js';
 import { t } from '../systems/i18n.js';
 import { Battle } from '../systems/combat/battle.js';
 import { MOVES } from '../../data/moves.js';
-import { nextLearnableMove } from '../systems/combat/movepool.js';
+import { nextLearnableMove, makeMoveset } from '../systems/combat/movepool.js';
+import { SPECIES_BY_ID } from '../../data/species.generated.js';
 import { startRecording, saveRecording } from '../systems/combat/recorder.js';
 import { markSeen, addCapturedMon, tryUnlock, diffOf } from '../systems/state.js';
 import { makeCommentator } from '../systems/combat/commentary.js';
@@ -36,10 +37,46 @@ const TYPE_COLORS = {
   dark: 0x705848, steel: 0xb8b8d0, fairy: 0xee99ac,
 };
 
+/** Repara EN SITIO un mon de combate para que nunca falte `moves`/`pp` (si no, el
+ *  juego se congela al renderizar el menú de ataque). Reconstruye el moveset real
+ *  desde la especie cuando es posible; si no, deja Forcejeo como último recurso. */
+function normalizeBattleMon(mon) {
+  if (!mon || typeof mon !== 'object') return mon;
+  const sp = SPECIES_BY_ID[mon.speciesId ?? mon.id];
+  // moves + pp
+  if (!Array.isArray(mon.moves) || mon.moves.length === 0) {
+    let set = sp ? makeMoveset(sp) : null;
+    if (!Array.isArray(set) || set.length === 0) set = ['struggle'];
+    mon.moves = set;
+  }
+  mon.moves = mon.moves.filter(id => MOVES[id]);          // descarta ids ya inexistentes
+  if (mon.moves.length === 0) mon.moves = ['struggle'];
+  if (!mon.pp || typeof mon.pp !== 'object') mon.pp = {};
+  for (const id of mon.moves) if (mon.pp[id] == null) mon.pp[id] = MOVES[id]?.pp ?? 5;
+  // identidad/base que el motor da por hecho
+  if (mon.level == null) mon.level = 5;
+  if (sp) { if (!mon.base) mon.base = sp.base; if (!mon.types) mon.types = sp.types; if (!mon.name) mon.name = sp.name; }
+  if (!mon.stages || typeof mon.stages !== 'object') mon.stages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+  // stats / HP (computeDamage lee mon.stats.spd, etc.)
+  if (!mon.stats || mon.stats.spd == null) {
+    if (sp || mon.base) mon.stats = computeStats({ base: mon.base || sp.base, level: mon.level, nature: mon.nature, ivs: mon.ivs, evs: mon.evs });
+    else mon.stats = { hp: 20, atk: 10, def: 10, spa: 10, spd: 10, spe: 10 };
+  }
+  if (mon.maxhp == null) mon.maxhp = mon.stats.hp;
+  if (mon.hp == null) mon.hp = mon.maxhp;
+  return mon;
+}
+
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
 
   init(data) {
+    // BLINDAJE: garantiza que TODO mon que entra a combate tenga moves/pp válidos.
+    // Un mon mal formado (save viejo, bebé de criadero, rescate del PC, etc.) hacía
+    // que showFight/IA lanzaran `undefined.map` y CONGELABAN todo el juego (#38).
+    // Se normaliza EN SITIO para que el daño siga reflejándose en run.party.
+    (data.playerTeam || []).forEach(normalizeBattleMon);
+    (data.enemyTeam || []).forEach(normalizeBattleMon);
     this.playerTeam = data.playerTeam;
     this.enemyTeam = data.enemyTeam;
     this.biome = data.biome;
@@ -517,7 +554,7 @@ export class BattleScene extends Phaser.Scene {
     this.clearPanel();
     const g = this.pendingGimmick;
     this.menuPrompt = g ? `✦ ${GIMMICK_NAME[g]} listo — elige movimiento` : 'Elige un movimiento (B: atrás)';
-    const mon = this.battle.mon('A');
+    const mon = normalizeBattleMon(this.battle.mon('A'));   // nunca dejar moves undefined (anti-freeze #38)
     const items = mon.moves.map(id => {
       const mv = MOVES[id];
       const stats = mv.power != null ? `Pot ${mv.power} · Prec ${mv.acc > 100 ? '∞' : mv.acc}` : 'Estado';
