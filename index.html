@@ -30,16 +30,24 @@
     }
     canvas { image-rendering: pixelated; display: block; }
   </style>
-  <script type="module" crossorigin src="./assets/index-CelEjjxX.js"></script>
+  <script type="module" crossorigin src="./assets/index-B2As0u1r.js"></script>
 </head>
 <body>
   <div id="game"></div>
-  <!-- Registro del Service Worker (offline + instalable). Ruta relativa = funciona en subpath. -->
+  <!-- Registro del Service Worker (offline + instalable). Ruta relativa = funciona en subpath.
+       OJO: en DESARROLLO (localhost) NO se registra y se desregistra cualquiera existente,
+       porque su caché cache-first servía bundles viejos y rompía el hot-reload / los fixes. -->
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW no registrado:', e));
-      });
+      const isDev = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+      if (isDev) {
+        navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
+        if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+      } else {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW no registrado:', e));
+        });
+      }
     }
   </script>
 </body>

@@ -6,7 +6,7 @@
 //   · OTRO ORIGEN (Google Fonts): se cachea de forma opaca para que la tipografía
 //     funcione sin red en visitas posteriores.
 // Subir CACHE_VERSION invalida cachés viejas en cada despliegue.
-const CACHE_VERSION = 'ti-v1';
+const CACHE_VERSION = 'ti-v2';
 const CACHE = `torre-infinita-${CACHE_VERSION}`;
 
 // App shell mínima a precachear en la instalación (rutas relativas al scope).
