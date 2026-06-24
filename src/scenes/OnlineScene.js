@@ -57,8 +57,38 @@ export class OnlineScene extends Phaser.Scene {
     this.list('¿Qué quieres hacer?', [
       { label: 'HOSPEDAR SALA', onPick: () => this.startHost() },
       { label: 'UNIRSE POR CÓDIGO', onPick: () => this.startJoin() },
+      { label: '❓ CÓMO CONECTAR (otra PC)', onPick: () => this.showHowTo() },
       { label: 'VOLVER', onPick: () => this.leave() },
     ], 'Hospeda y comparte tu código, o únete al de un amigo. P2P (WebRTC).');
+  }
+
+  /** Guía paso a paso para jugar entre dos dispositivos distintos. */
+  showHowTo() {
+    this.state = 'howto';
+    let url = 'el mismo enlace del juego';
+    try { url = (location.origin + location.pathname).replace(/\/$/, ''); } catch { /* */ }
+    this.panel.removeAll(true);
+    const { w, h } = VIEW;
+    const lines = [
+      'JUGAR CON UN AMIGO (otra PC o teléfono):',
+      '',
+      '1) Que tu amigo abra ESTA MISMA web en su',
+      '   dispositivo:',
+      `   ${url}`,
+      '',
+      '2) UNO elige HOSPEDAR SALA y le sale un CÓDIGO.',
+      '3) El OTRO elige UNIRSE y escribe ese código.',
+      '4) ¡Listos! Ya pueden COMERCIAR o LUCHAR.',
+      '',
+      'No hace falta misma red ni servidor: es directo',
+      'entre los dos (P2P). Solo necesitan internet.',
+    ];
+    this.panel.add(this.add.text(w / 2, 36, lines.join('\n'), { fontFamily: FONT, fontSize: '7px', color: '#e8f6ff', align: 'left', lineSpacing: 5, wordWrap: { width: w - 30 } }).setOrigin(0.5, 0));
+    this.opts = [{ label: '◀ VOLVER', onPick: () => this.showMenu() }];
+    this.cursor = 0;
+    this.rows = [this.add.text(w / 2, h - 32, '▶ ◀ VOLVER', { fontFamily: FONT, fontSize: '8px', color: '#ffd76a' }).setOrigin(0.5)];
+    this.panel.add(this.rows);
+    this.msg.setText('A/Enter o B para volver');
   }
 
   // ---------- conexión ----------
@@ -199,6 +229,6 @@ export class OnlineScene extends Phaser.Scene {
     if (d === 'up') { this.cursor = Math.max(0, this.cursor - 1); sfx(this, 'cursor'); this.paint(); }
     else if (d === 'down') { this.cursor = Math.min(this.opts.length - 1, this.cursor + 1); sfx(this, 'cursor'); this.paint(); }
     if (this.gba.confirm()) { const it = this.opts[this.cursor]; if (it?.onPick) { sfx(this, 'select'); it.onPick(); } }
-    else if (this.gba.cancel() && this.state === 'menu') this.leave();
+    else if (this.gba.cancel()) { if (this.state === 'menu') this.leave(); else if (this.state === 'howto') this.showMenu(); }
   }
 }

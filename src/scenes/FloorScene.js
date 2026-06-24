@@ -25,6 +25,7 @@ import { MOVES } from '../../data/moves.js';
 import { computeStats } from '../systems/pokemon/stats.js';
 import { nextLearnableMove } from '../systems/combat/movepool.js';
 import { pendingEvolution, evolveMon } from '../systems/pokemon/evolution.js';
+import { storyBeatFor } from '../../data/story.js';
 
 const itemAny = (k) => BALLS[k] || HEALS[k] || REPELS[k] || FIELD[k] || CONSUM[k] || CONSUM[k] || ITEMS[k] || null;
 
@@ -152,6 +153,27 @@ export class FloorScene extends Phaser.Scene {
     playBgm(this, this.exploreBgm(), 0.3);
     saveRun(this.registry, this.floorNum);   // autosave al pisar cada piso
     this.cameras.main.fadeIn(300, 0, 0, 0);
+    // HITO NARRATIVO: revela un trozo de la historia de la Torre al ENTRAR a un piso
+    // clave (una sola vez por partida). Ver data/story.js.
+    this.run.storySeen = this.run.storySeen || [];
+    const beat = storyBeatFor(this.floorNum);
+    if (beat && !this.run.storySeen.includes(this.floorNum)) {
+      this.run.storySeen.push(this.floorNum);
+      this.time.delayedCall(700, () => this.storyBeat(beat));
+    }
+  }
+
+  /** Caja narrativa prominente (hito de historia). Aparece arriba, se lee y se va. */
+  storyBeat(text) {
+    const { w } = VIEW;
+    const box = this.add.container(w / 2, 64).setScrollFactor(0).setDepth(300050).setAlpha(0);
+    const bg = this.add.rectangle(0, 0, w - 36, 56, 0x05060a, 0.92).setStrokeStyle(2, 0xffd76a, 0.9);
+    const star = this.add.text(-(w - 36) / 2 + 12, -18, '✦', { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#ffd76a' }).setOrigin(0, 0.5);
+    const tx = this.add.text(0, 0, text, { fontFamily: '"Press Start 2P"', fontSize: '7px', color: '#e8f6ff', align: 'center', lineSpacing: 5, wordWrap: { width: w - 64 } }).setOrigin(0.5);
+    box.add([bg, star, tx]);
+    sfx(this, 'select', 0.5);
+    this.tweens.add({ targets: box, alpha: 1, y: 70, duration: 350, ease: 'Quad.out' });
+    this.tweens.add({ targets: box, alpha: 0, delay: 4600, duration: 600, onComplete: () => box.destroy() });
   }
 
   // música de exploración: pueblo seguro → tema de Centro Pokémon; si no, la del
@@ -207,20 +229,22 @@ export class FloorScene extends Phaser.Scene {
     // servicios. En ZONA SEGURA (piso 5/15/25…) el piso es un PUEBLO: cada servicio
     // lo atiende un NPC (chibi real), con gente de relleno; no hay marcador flotante
     // y NO aparecen Pokémon salvajes en todo el piso. En mazmorra: marcador clásico.
-    this.serviceTile = null;
+    this.serviceTile = null;   // ya no hay marcador flotante: el servicio lo da una PERSONA (NPC)
     this.npcs = [];
     if (this.floor.isSafeFloor) {
       this.buildTown(room);
     } else if (['shop', 'pokecenter', 'rest'].includes(room.type)) {
+      // PERSONA que atiende el servicio (en vez del marcador/edificio): se le habla con A.
+      const SERVICE_NPC = { shop: 'wattson', pokecenter: 'lyra', rest: 'serena' };
+      const SERVICE_LINE = {
+        shop: '¡Bienvenido a la tienda! ¿Qué te preparo?',
+        pokecenter: 'Soy la Enfermera. ¡Deja que cure a tu equipo!',
+        rest: '¿Una siesta para recuperar PS? Adelante.',
+      };
       const sc = (COLS / 2) | 0, sr = 3;
-      this.serviceTile = { type: room.type, c: sc, r: sr };
-      const sp2 = this.tileCenter(sc, sr);
-      const tex = room.type === 'shop' ? 'item_pokeball' : room.type === 'pokecenter' ? 'item_healball' : 'item_sitrusberry';
-      const mk = this.add.image(sp2.x, sp2.y - 6, tex).setScale(1.3);
-      const lbl = { shop: 'TIENDA', pokecenter: 'CENTRO POKéMON', rest: 'DESCANSO' }[room.type];
-      const lt = this.add.text(sp2.x, sp2.y - 28, lbl, { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#ffd76a', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5);
-      this.worldLayer.add(mk); this.worldLayer.add(lt);
-      this.tweens.add({ targets: mk, y: sp2.y - 12, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      const id = OWMETA[SERVICE_NPC[room.type]] ? SERVICE_NPC[room.type] : 'red';
+      this.spawnNpc(sc, sr, id, room.type, SERVICE_LINE[room.type]);
+      this.scatterDecor(makeRNG(`${this.floor.seed}:svc:${roomId}`), 5);   // algo de relleno
     }
 
     // JEFE: en pisos /10, la sala del jefe contiene un combate ÉPICO que lo guarda.
@@ -291,22 +315,16 @@ export class FloorScene extends Phaser.Scene {
       rest: '¿Una siesta para recuperar PS? Adelante.',
     };
     const safe = this.doorSafeTiles(room);
-    this._corridor = safe;   // corredores de puerta: ni edificios ni NPCs los bloquean
-    const SERVICE_BLD = { shop: 'mart', pokecenter: 'center', rest: 'house_a' };
+    this._corridor = safe;   // corredores de puerta: ni decoración ni NPCs los bloquean
     const mid = (COLS / 2) | 0;
+    // NADA de edificios (no funcionaban): el servicio lo da una PERSONA a la que hablas.
     if (['shop', 'pokecenter', 'rest'].includes(room.type)) {
-      // EDIFICIO real del servicio arriba-centro + su encargado en la puerta
-      this.placeBuilding(mid, 2, SERVICE_BLD[room.type], safe);
       const id = OWMETA[SERVICE_NPC[room.type]] ? SERVICE_NPC[room.type] : (POOL[0] || 'red');
       this.spawnNpc(mid, 3, id, room.type, SERVICE_LINE[room.type]);
-    } else {
-      // pueblo "normal": casas reales a los lados (sin tapar puertas)
-      const HOUSES = ['house_a', 'house_b', 'house_c', 'house_d'];
-      const pickH = () => HOUSES[Math.floor(rng.float() * HOUSES.length)];
-      this.placeBuilding(3, 3, pickH(), safe);
-      this.placeBuilding(COLS - 4, 3, pickH(), safe);
-      if (rng.float() < 0.45) this.placeBuilding(mid, 2, 'gym', safe);
     }
+    // relleno visual del pueblo: piedras, flores y arbustos por el suelo (no bloquean
+    // el centro/corredores) para que las salas no se vean vacías ahora sin edificios.
+    this.scatterDecor(rng, 10 + Math.floor(rng.float() * 8));
     // CLUB DE BATALLA ONLINE — en CADA pueblo hay un encargado que abre el modo
     // online P2P (comerciar / PVP con un amigo por código de sala). Se le habla con A.
     let clubCell = this.freeTownCell(rng);
@@ -380,7 +398,7 @@ export class FloorScene extends Phaser.Scene {
     // habla, pero NO tapona el camino a la puerta → evita pueblos sin salida)
     if (this.tilemap?.cells?.[r]?.[c] && !this._corridor?.has(c + ',' + r)) this.tilemap.cells[r][c].blocked = true;
     if (role) {
-      const lbl = { shop: 'TIENDA', pokecenter: 'CENTRO', rest: 'POSADA' }[role] || '';
+      const lbl = { shop: 'TIENDA', pokecenter: 'ENFERMERA', rest: 'POSADA' }[role] || '';
       const lt = this.add.text(pos.x, pos.y - 30, lbl, { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#ffd76a', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(70 + pos.y);
       this.worldLayer.add(lt);
     }
@@ -408,6 +426,35 @@ export class FloorScene extends Phaser.Scene {
     }
     this.props.push(img);
     return img;
+  }
+
+  /** Esparce DECORACIÓN de suelo (piedras, hojas, arbustos) que NO bloquea el paso,
+   *  para que las salas/pueblos no se vean vacíos. Depth 46 = bajo el jugador (suelo). */
+  scatterDecor(rng, n) {
+    const DECOR = ['fx_rock1', 'fx_rock2', 'fx_rock3', 'fx_leaf1', 'fx_leaf2', 'fx_rock1', 'tallgrass'];
+    const tm = this.tilemap;
+    if (!tm?.cells) return;
+    for (let i = 0; i < n; i++) {
+      for (let t = 0; t < 14; t++) {
+        const c = 1 + Math.floor(rng.float() * (COLS - 2));
+        const r = 1 + Math.floor(rng.float() * (ROWS - 2));
+        const cell = tm.cells?.[r]?.[c];
+        if (!cell || cell.base !== 'floor' || cell.blocked || cell.decor || cell.tall) continue;
+        if (this._corridor?.has(c + ',' + r)) continue;                 // no tapar puertas
+        if (Math.abs(c - 7) <= 1 && Math.abs(r - 5) <= 1) continue;      // no sobre el spawn
+        if (this.npcs?.some(nn => nn.c === c && nn.r === r)) continue;
+        const key = DECOR[Math.floor(rng.float() * DECOR.length)];
+        if (!this.textures.exists(key)) continue;
+        const pos = this.tileCenter(c, r);
+        const img = this.add.image(pos.x, pos.y + 5, key).setOrigin(0.5, 0.8).setDepth(46);
+        img.setScale(key === 'tallgrass' ? 0.62 : 0.4 + rng.float() * 0.22);
+        if (key.startsWith('fx_leaf')) img.setAlpha(0.85);
+        if (key === 'tallgrass' && this.biome?.grassTint && this.biome.grassTint !== 0xffffff) img.setTint(this.biome.grassTint);
+        cell.decor = true;                 // marca la casilla (no repetir, no poner hierba encima)
+        this.worldLayer.add(img); this.props.push(img);
+        break;
+      }
+    }
   }
 
   /** Casillas que NUNCA deben bloquearse (cada puerta + su corredor de entrada). */
@@ -438,9 +485,13 @@ export class FloorScene extends Phaser.Scene {
     const [fdx, fdy] = DIRV[this.facing];
     const npc = this.npcs?.find(n => n.c === this.col + fdx && n.r === this.row + fdy);
     if (!npc) return false;
-    if (npc.role === 'criadero') this.openCriadero();   // CRIADERO: cría con Ditto (no es interior)
-    else if (npc.role) this.enterBuilding(npc.role);     // ENTRAR al edificio (interior real)
-    else this.toast(npc.line);
+    if (npc.role === 'criadero') this.openCriadero();       // CRIADERO: cría con Ditto
+    else if (npc.role === 'club') this.enterBuilding('club'); // CLUB de batalla online (escena Online)
+    else if (['shop', 'pokecenter', 'rest'].includes(npc.role)) {
+      // la PERSONA te atiende AL INSTANTE (ya no se entra a un edificio interior)
+      if (npc.line) this.toast(npc.line);
+      this.useService(npc.role);
+    } else this.toast(npc.line);
     return true;
   }
 
@@ -877,12 +928,15 @@ export class FloorScene extends Phaser.Scene {
       else this.botTimer = 0;
       return;   // ignora input humano mientras la IA juega
     }
-    // atajos de control: △ mochila · □ equipo · Select Pokédex
-    if (this.gba.justDown('TRI')) return this.toggleBag();
+    // atajos de control (TODOS los botones tienen función):
+    //   △ mochila · □ equipo · Select Pokédex · Start menú/mochila · L bici · R IA
+    if (this.gba.justDown('TRI') || this.gba.justDown('START')) return this.toggleBag();
     if (this.gba.justDown('SQR')) return this.toggleTeam();
     if (this.gba.justDown('SELECT')) return this.openPokedex();
-    // A frente a una Poké Ball tirada → abrirla
-    if (this.gba.confirm()) {
+    if (this.gba.justDown('L')) return this.tryBike();
+    if (this.gba.justDown('R')) return this.toggleAuto();
+    // A frente a una Poké Ball tirada / NPC / charco → interactuar
+    if (this.gba.justDown('A')) {
       const [fdx, fdy] = DIRV[this.facing];
       const pk = this.pickups?.find(p => p.c === this.col + fdx && p.r === this.row + fdy);
       if (pk) {
@@ -1560,11 +1614,19 @@ export class FloorScene extends Phaser.Scene {
   }
 
   /** Montar/desmontar la BICI: más velocidad + sprite de bici bajo el jugador. */
+  /** Atajo L: subir/bajar de la bici (solo si la tienes). */
+  tryBike() {
+    if (this.transitioning || this.stepping || this.bagUI || this.teamUI || this.shopUI) return;
+    if (!this.biking && !(this.run?.bag?.bici > 0)) return this.toast('No tienes una bici. Cómprala o encuéntrala.');
+    this.toggleBike();
+  }
+
   toggleBike() {
     this.biking = !this.biking;
     if (this.biking) {
       sfx(this, 'select', 0.5);
-      if (!this.bikeSprite || !this.bikeSprite.active) this.bikeSprite = this.add.image(this.player.x, this.player.y + 7, 'item_bici').setScale(1.2);
+      const tex = this.textures.exists('item_bici') ? 'item_bici' : (this.textures.exists('item_bicycle') ? 'item_bicycle' : 'item_pokeball');
+      if (!this.bikeSprite || !this.bikeSprite.active) this.bikeSprite = this.add.image(this.player.x, this.player.y + 7, tex).setScale(1.2);
       this.bikeSprite.setVisible(true);
       this.toast('🚲 ¡En la bici! Vas más rápido (úsala otra vez para bajar).');
     } else {
@@ -1948,7 +2010,7 @@ export class FloorScene extends Phaser.Scene {
     bar.fillStyle(0xffd76a, 1).fillRect(0, 26, VIEW.w, 1);
     this.hudFloor = this.add.text(8, 8, '', { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#ffd76a' });
     this.hudBiome = this.add.text(VIEW.w - 8, 8, '', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#9fb0d0' }).setOrigin(1, 0);
-    const hint = this.add.text(VIEW.w / 2, VIEW.h - 4, 'D-pad mover · B correr · M bici · I IA · Esc menú', { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#5a6a8a' }).setOrigin(0.5, 1);
+    const hint = this.add.text(VIEW.w / 2, VIEW.h - 4, 'D-pad mover · A hablar · B correr · L bici · R IA · M/Start mochila · T equipo · Esc menú', { fontFamily: '"Press Start 2P"', fontSize: '6px', color: '#5a6a8a' }).setOrigin(0.5, 1);
     this.hud.add([bar, this.hudFloor, this.hudBiome, hint]);
     this.mini = this.add.graphics().setDepth(100000).setScrollFactor(0);
     this.refreshHud();

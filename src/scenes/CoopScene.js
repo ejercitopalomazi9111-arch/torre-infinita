@@ -9,6 +9,7 @@ import { CANVAS, VIEW } from '../main.js';
 import { registerBiomeTextures } from '../systems/textureFactory.js';
 import { BIOMES, biomeForFloor } from '../../data/biomes.js';
 import { SPECIES } from '../../data/species.generated.js';
+import { OWMETA } from '../../data/owmeta.generated.js';
 import { makeInput, PLAYER_CONTROLS } from '../systems/input.js';
 import { makeRNG } from '../engine/rng.js';
 import { playBgm, sfx } from '../systems/audio.js';
@@ -102,18 +103,43 @@ export class CoopScene extends Phaser.Scene {
     }
   }
 
+  // sprites REALES de entrenador (chibi GBA animado) por jugador, con un anillo de
+  // color en el suelo para distinguirlos en la pantalla dividida.
   buildPlayers() {
     const spawns = [[2, 2], [4, 2], [2, 4], [4, 4]];
+    const TR = ['red', 'calem', 'nate', 'dawn', 'may', 'lucas', 'hilda', 'rosa']
+      .filter(id => OWMETA[id] && this.textures.exists('ow_' + id));
     for (let i = 0; i < this.numPlayers; i++) {
       const cfg = PLAYER_CONTROLS[i];
       const input = makeInput(this, cfg.map, cfg.pad);
       const [c, r] = spawns[i], p = this.tile(c, r);
-      const body = this.add.rectangle(p.x, p.y, 20, 26, COLORS[i]).setStrokeStyle(2, 0x05060a).setDepth(60 + p.y);
-      const eye = this.add.rectangle(p.x, p.y - 4, 10, 4, 0x05060a).setDepth(61 + p.y);
-      const grp = this.add.container(0, 0, [body, eye]); this.world.add(grp);
-      this.players.push({ idx: i, c, r, input, body, eye, facing: 'down', stepping: false, moveT: 0, catches: 0, color: COLORS[i], onPortal: false });
+      const trId = TR[i % TR.length] || 'red';
+      const chibi = OWMETA[trId] && OWMETA[trId].frames >= 9 && this.textures.exists('ow_' + trId);
+      const ring = this.add.ellipse(p.x, p.y + 11, 26, 12, COLORS[i], 0.5).setStrokeStyle(2, COLORS[i], 0.9).setDepth(48 + p.y);
+      let sprite;
+      if (chibi) { this.ensureOwAnims(trId); sprite = this.add.sprite(p.x, p.y, 'ow_' + trId, 0).setScale(2); }
+      else sprite = this.add.image(p.x, p.y, this.textures.exists('ow_' + trId) ? 'ow_' + trId : (this.textures.exists('trainer_' + trId) ? 'trainer_' + trId : 'trainer_red'));
+      sprite.setOrigin(0.5, 0.8).setDepth(60 + p.y);
+      this.world.add([ring, sprite]);
+      this.players.push({ idx: i, c, r, input, sprite, ring, trId, chibi, facing: 'down', stepping: false, moveT: 0, catches: 0, color: COLORS[i], onPortal: false });
     }
   }
+
+  animDir(d) { return (d === 'left' || d === 'right') ? 'side' : d; }
+  ensureOwAnims(id) {
+    const rows = { down: [3, 0, 4, 0], up: [5, 1, 6, 1], side: [7, 2, 8, 2] };
+    for (const [dir, seq] of Object.entries(rows)) {
+      const key = `cow${id}_${dir}`;
+      if (this.anims.exists(key)) continue;
+      this.anims.create({ key, frames: seq.map(f => ({ key: 'ow_' + id, frame: f })), frameRate: 9, repeat: -1 });
+    }
+  }
+  faceFlip(pl, dir) {   // los frames laterales del chibi miran a la izquierda
+    if (dir === 'left') pl.sprite.setFlipX(false);
+    else if (dir === 'right') pl.sprite.setFlipX(true);
+    else pl.sprite.setFlipX(false);
+  }
+  idleFrame(pl) { if (pl.chibi) { pl.sprite.anims.stop(); pl.sprite.setFrame(({ down: 0, up: 1, side: 2 })[this.animDir(pl.facing)]); } }
 
   setupCameras() {
     const n = this.numPlayers, W = CANVAS.w, H = CANVAS.h;
@@ -126,7 +152,7 @@ export class CoopScene extends Phaser.Scene {
     this.pcams.forEach((cam, i) => {
       cam.setBounds(0, 0, AW * T, AH * T);
       cam.setZoom(1);
-      cam.startFollow(this.players[i].body, true, 0.15, 0.15);
+      cam.startFollow(this.players[i].sprite, true, 0.15, 0.15);
       cam.setBackgroundColor(i % 2 ? '#0a0e16' : '#070a12');
     });
   }
@@ -145,7 +171,7 @@ export class CoopScene extends Phaser.Scene {
     // cada cámara de juego ignora el HUD; la de UI ignora el mundo
     this.pcams.forEach(cam => cam.ignore(this.hud));
     this.uiCam.ignore(this.world);
-    this.uiCam.ignore(this.players.flatMap(p => [p.body, p.eye]));
+    this.uiCam.ignore(this.players.flatMap(p => [p.sprite, p.ring]));
     this.refreshHud();
   }
 
@@ -167,17 +193,19 @@ export class CoopScene extends Phaser.Scene {
   movePlayer(pl, delta) {
     if (pl.stepping) return;
     const d = pl.input.dirHeld();
-    if (!d) return;
-    pl.facing = d;
+    if (!d) { this.idleFrame(pl); return; }
+    pl.facing = d; this.faceFlip(pl, d);
     const [dx, dy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[d];
     const nc = pl.c + dx, nr = pl.r + dy;
-    if (!this.walkable(nc, nr)) return;
+    if (!this.walkable(nc, nr)) { this.idleFrame(pl); return; }
     pl.c = nc; pl.r = nr; pl.stepping = true;
     const p = this.tile(nc, nr);
-    const dur = pl.input.isDown('B') ? 90 : 150;   // B = correr
-    this.tweens.add({ targets: [pl.body], x: p.x, y: p.y, duration: dur, ease: 'Linear', onComplete: () => { pl.stepping = false; this.afterStep(pl); } });
-    this.tweens.add({ targets: [pl.eye], x: p.x, y: p.y - 4, duration: dur, ease: 'Linear' });
-    pl.body.setDepth(60 + p.y); pl.eye.setDepth(61 + p.y);
+    const running = pl.input.isDown('B');           // B = correr
+    const dur = running ? 90 : 150;
+    if (pl.chibi) { const key = `cow${pl.trId}_${this.animDir(d)}`; if (this.anims.exists(key)) { pl.sprite.play(key, true); pl.sprite.anims.timeScale = running ? 1.7 : 1; } }
+    this.tweens.add({ targets: pl.sprite, x: p.x, y: p.y, duration: dur, ease: 'Linear', onComplete: () => { pl.stepping = false; this.afterStep(pl); } });
+    this.tweens.add({ targets: pl.ring, x: p.x, y: p.y + 11, duration: dur, ease: 'Linear' });
+    pl.sprite.setDepth(60 + p.y); pl.ring.setDepth(48 + p.y);
   }
 
   afterStep(pl) {
@@ -199,7 +227,7 @@ export class CoopScene extends Phaser.Scene {
   }
 
   popup(pl, txt) {
-    const t = this.add.text(pl.body.x, pl.body.y - 22, txt, { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffffff', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(99000);
+    const t = this.add.text(pl.sprite.x, pl.sprite.y - 22, txt, { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffffff', stroke: '#05060a', strokeThickness: 3 }).setOrigin(0.5).setDepth(99000);
     this.world.add(t); this.uiCam?.ignore(t);
     this.tweens.add({ targets: t, y: t.y - 14, alpha: 0, duration: 700, onComplete: () => t.destroy() });
   }
