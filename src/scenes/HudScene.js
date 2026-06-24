@@ -76,8 +76,37 @@ export class HudScene extends Phaser.Scene {
     this.btnB = this.add.circle(cx + 12, 252, 11, 0x5a2a2a).setStrokeStyle(2, 0xf06060).setDepth(4);
     this.add.text(cx + 12, 252, 'B', { fontFamily: FONT, fontSize: '7px', color: '#ffc8c8' }).setOrigin(0.5).setDepth(5);
     this.btnABase = 0x2a5a3a; this.btnBBase = 0x5a2a2a;
-    this.bindButton(this.btnA, 13, 'Enter');         // A = confirmar
-    this.bindButton(this.btnB, 8, 'Backspace');      // B = atrás
+    this.bindButton(this.btnA, 90, 'z');             // A = la tecla A REAL (Z): interactuar/confirmar
+    this.bindButton(this.btnB, 88, 'x');             // B = atrás/cancelar (X)
+
+    // ----- botones que FALTABAN en el mando (Carlos): Start, Select, L, R + atajos -----
+    // gatillos L/R arriba de la cabina
+    this.btnL = this.add.circle(cx - 16, 100, 9, 0x2a3a5a).setStrokeStyle(2, CYAN, 0.8).setDepth(4);
+    this.add.text(cx - 16, 100, 'L', { fontFamily: FONT, fontSize: '6px', color: '#bfe0ff' }).setOrigin(0.5).setDepth(5);
+    this.btnR = this.add.circle(cx + 16, 100, 9, 0x2a3a5a).setStrokeStyle(2, CYAN, 0.8).setDepth(4);
+    this.add.text(cx + 16, 100, 'R', { fontFamily: FONT, fontSize: '6px', color: '#bfe0ff' }).setOrigin(0.5).setDepth(5);
+    this.bindButton(this.btnL, 81, 'q');             // L = Q (bici)
+    this.bindButton(this.btnR, 69, 'e');             // R = E (IA)
+    // Start (Enter) y Select (Shift) como pastillas pequeñas
+    const pill = (x, y, label, code, key, col) => {
+      const w = 30, h = 13;
+      const r = this.add.rectangle(x, y, w, h, 0x14141f).setStrokeStyle(2, col, 0.9).setDepth(4);
+      this.add.text(x, y, label, { fontFamily: FONT, fontSize: '5px', color: '#e8f6ff' }).setOrigin(0.5).setDepth(5);
+      this.bindButton(r, code, key);
+      return r;
+    };
+    this.btnStart = pill(cx - 18, 272, 'START', 13, 'Enter', GOLD);
+    this.btnSelect = pill(cx + 18, 272, 'SELECT', 16, 'Shift', CYAN);
+    // atajos directos: 🎒 mochila (M) · 👥 equipo (T) · ▦ dex (P)
+    const tag = (x, y, label, code, key) => {
+      const r = this.add.circle(x, y, 9, 0x1a1a26).setStrokeStyle(2, GOLD, 0.7).setDepth(4).setInteractive({ useHandCursor: true });
+      this.add.text(x, y, label, { fontFamily: 'system-ui,sans-serif', fontSize: '9px', color: '#ffd76a' }).setOrigin(0.5).setDepth(5);
+      this.bindButton(r, code, key);
+      return r;
+    };
+    tag(cx - 18, 56, '🎒', 77, 'm');
+    tag(cx, 56, '👥', 84, 't');
+    tag(cx + 18, 56, '▦', 80, 'p');
 
     // palanca arcade: base + mástil con bola que pivota desde abajo (se inclina
     // con el eje X). Antes era un rectángulo fino que se veía "roto".

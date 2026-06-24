@@ -42,7 +42,7 @@ export class BootScene extends Phaser.Scene {
       this.load.image('bld_' + b, 'assets/sprites/town/' + b + '.png');
     }
     // INTERIORES reales (al entrar a un edificio del pueblo)
-    for (const b of ['int_center', 'int_mart']) this.load.image(b, 'assets/sprites/town/' + b + '.png');
+    for (const b of ['int_center', 'int_mart', 'int_house', 'int_trade']) this.load.image(b, 'assets/sprites/town/' + b + '.png');
     this.load.image('picnic_mat', 'assets/sprites/town/picnic_mat.png');   // mantel de picnic (intro)
     for (const b of ['oran-berry', 'sitrus-berry', 'pecha-berry']) {
       this.load.image('item_' + b.replace('-', ''), 'assets/sprites/items/' + b + '.png');

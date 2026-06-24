@@ -322,20 +322,17 @@ export class FloorScene extends Phaser.Scene {
     // a poner, pero ahora cada uno tiene una puerta que SÍ entra a su interior real
     // (InteriorScene: caminas al mostrador y pulsas A). Anclados arriba (filas 1-3),
     // lejos del cruce central (7,5) y de la puerta N (col 7) → sin softlocks.
-    const BLD = { pokecenter: 'center', shop: 'mart', rest: 'house_a' };
-    const LBL = { pokecenter: 'CENTRO', shop: 'TIENDA', rest: 'POSADA' };
-    if (BLD[room.type]) {
-      this.placeEnterableBuilding(4, 2, BLD[room.type], room.type, safe, LBL[room.type]);
-    } else {
-      // pueblo sin servicio asignado: igual ponemos un Centro para curar (siempre útil)
-      this.placeEnterableBuilding(4, 2, 'center', 'pokecenter', safe, 'CENTRO');
-    }
-    // CASAS decorativas que TAMBIÉN se pueden entrar (villano amable da una pista).
-    const HOUSES = ['house_b', 'house_c', 'house_d', 'gym'];
-    const hk1 = HOUSES[Math.floor(rng.float() * HOUSES.length)];
-    const hk2 = HOUSES[Math.floor(rng.float() * HOUSES.length)];
-    this.placeEnterableBuilding(10, 2, hk1, 'house', safe, 'CASA');
-    this.placeEnterableBuilding(12, 3, hk2, 'house', safe, 'CASA');
+    // El SERVICIO es siempre un CENTRO (cura) o una TIENDA — la POSADA se quitó
+    // (Carlos: innecesaria). baseRow 3 → el edificio queda BAJO el HUD sin cortarse,
+    // y los 3 edificios van en columnas separadas (3 / 9 / 12) lejos del cruce
+    // central (7,5) y de la puerta N (col 7) → no se solapan entre ellos.
+    const isShop = room.type === 'shop';
+    this.placeEnterableBuilding(3, 3, isShop ? 'mart' : 'center', isShop ? 'shop' : 'pokecenter', safe, isShop ? 'TIENDA' : 'CENTRO');
+    // CASAS decorativas que TAMBIÉN se entran (vecino que da una pista). Solo casas
+    // ESTRECHAS (3 de ancho) para no solaparse con el vecino de al lado.
+    const HOUSES = ['house_b', 'house_c', 'house_d'];
+    this.placeEnterableBuilding(9, 3, HOUSES[Math.floor(rng.float() * HOUSES.length)], 'house', safe, 'CASA');
+    this.placeEnterableBuilding(12, 3, HOUSES[Math.floor(rng.float() * HOUSES.length)], 'house', safe, 'CASA');
     // relleno visual del pueblo: piedras, flores y arbustos por el suelo (no bloquean
     // el centro/corredores) para que las salas no se vean vacías.
     this.scatterDecor(rng, 8 + Math.floor(rng.float() * 6));
@@ -389,6 +386,8 @@ export class FloorScene extends Phaser.Scene {
       if (Math.abs(c - 7) <= 1 && Math.abs(r - 5) <= 1) continue;   // no tapar el spawn
       if (this._corridor?.has(c + ',' + r)) continue;               // no tapar corredores de puerta
       if (this.npcs.some(n => n.c === c && n.r === r)) continue;
+      if (this.townDoors?.some(d => d.c === c && d.r === r)) continue;   // no tapar puertas de edificios
+      if (this.townDoors?.some(d => d.c === c && d.r === r + 1)) continue; // ni la casilla de entrada (delante de la puerta)
       return { c, r };
     }
     return null;
@@ -974,14 +973,15 @@ export class FloorScene extends Phaser.Scene {
       return;   // ignora input humano mientras la IA juega
     }
     // atajos de control (TODOS los botones tienen función):
-    //   △ mochila · □ equipo · Select Pokédex · Start menú/mochila · L bici · R IA
-    if (this.gba.justDown('TRI') || this.gba.justDown('START')) return this.toggleBag();
+    //   △ mochila · □ equipo · Select Pokédex · L bici · R IA · A/Enter interactuar
+    //   (Enter ya NO abre la mochila: confirma/interactúa como A. Mochila = △ o tecla M.)
+    if (this.gba.justDown('TRI')) return this.toggleBag();
     if (this.gba.justDown('SQR')) return this.toggleTeam();
     if (this.gba.justDown('SELECT')) return this.openPokedex();
     if (this.gba.justDown('L')) return this.tryBike();
     if (this.gba.justDown('R')) return this.toggleAuto();
-    // A frente a una Poké Ball tirada / NPC / charco → interactuar
-    if (this.gba.justDown('A')) {
+    // A o Enter frente a una Poké Ball tirada / puerta / NPC / charco → interactuar
+    if (this.gba.justDown('A') || this.gba.justDown('START')) {
       const [fdx, fdy] = DIRV[this.facing];
       const pk = this.pickups?.find(p => p.c === this.col + fdx && p.r === this.row + fdy);
       if (pk) {
@@ -1951,7 +1951,9 @@ export class FloorScene extends Phaser.Scene {
   dbgWarp(floor) { this.scene.restart({ seed: this.seedBase, floor: Phaser.Math.Clamp(floor | 0, 1, 9111) }); }
   dbgMoney(n) { this.run.money = (this.run.money || 0) + (n | 0); this.toast(`DEBUG: dinero → ${this.run.money} ₽`); }
   dbgItem(key, qty = 10) { this.run.bag[key] = (this.run.bag[key] || 0) + (qty | 0); this.toast(`DEBUG: +${qty} ${key}`); }
-  dbgReveal() { for (const id of this.floor.roomById.keys()) this.visited.add(id); this.toast('DEBUG: mapa revelado'); }
+  dbgReveal() { for (const id of this.floor.roomById.keys()) this.visited.add(id); this.refreshHud(); this.toast('DEBUG: mapa revelado'); }
+  dbgSave() { saveRun(this.registry, this.floorNum); sfx(this, 'save'); this.toast('DEBUG: cambios guardados en tu partida'); }
+  dbgResetNote() { this.autoTag?.setText('').setVisible(false); this.toast('DEBUG: ajustes a predeterminado (Modo Dios/IA off, x200)'); }
 
   /** En MODO DIOS no se libran combates (invencible por diseño): se registran y se
    *  cuentan como victoria para que la progresión (pools/encuentros) avance normal. */
@@ -2094,13 +2096,42 @@ export class FloorScene extends Phaser.Scene {
     const rooms = this.floor.rooms;
     const xs = rooms.map(r => r.gx), ys = rooms.map(r => r.gy);
     const minx = Math.min(...xs), miny = Math.min(...ys);
-    const cell = 9, pad = 6, ox = VIEW.w - (Math.max(...xs) - minx + 1) * cell - pad, oy = VIEW.h - (Math.max(...ys) - miny + 1) * cell - pad;
-    g.fillStyle(0x05060a, 0.7).fillRect(ox - 3, oy - 3, (Math.max(...xs) - minx + 1) * cell + 6, (Math.max(...ys) - miny + 1) * cell + 6);
-    const COL = { stairs: 0x54e0c8, boss: 0xff5a5a, shop: 0xffd76a, pokecenter: 0xff9fb0, entrance: 0xffffff };
+    const maxx = Math.max(...xs), maxy = Math.max(...ys);
+    // CELDA con HUECO: el cuadro de la sala es pequeño y el espacio entre celdas
+    // se usa para dibujar los PUENTES que conectan salas (qué lleva a qué).
+    const s = 13, sq = 8, pad = 6;
+    const W = (maxx - minx + 1) * s, H = (maxy - miny + 1) * s;
+    const ox = VIEW.w - W - pad, oy = VIEW.h - H - pad;
+    g.fillStyle(0x05060a, 0.72).fillRect(ox - 3, oy - 3, W + 6, H + 6);
+    const cx = (r) => ox + (r.gx - minx) * s + sq / 2;
+    const cy = (r) => oy + (r.gy - miny) * s + sq / 2;
+    const known = (r) => this.visited.has(r.id) || r.id === this.currentRoomId;
+    // 1) PUENTES: por cada sala conocida y cada puerta suya, línea hasta la vecina
+    //    (dorado si ambas conocidas; tenue si la vecina aún no se visita = pista).
     for (const r of rooms) {
-      if (!this.visited.has(r.id) && r.id !== this.currentRoomId) continue;
-      const col = r.id === this.currentRoomId ? 0xffffff : (COL[r.type] || 0x5a6a8a);
-      g.fillStyle(col, 1).fillRect(ox + (r.gx - minx) * cell, oy + (r.gy - miny) * cell, cell - 2, cell - 2);
+      if (!known(r)) continue;
+      const doors = this.floor.roomById.get(r.id)?.doors || [];
+      for (const d of doors) {
+        const nb = this.floor.roomById.get(d.to);
+        if (!nb) continue;
+        const both = known(nb);
+        g.lineStyle(both ? 2 : 1, both ? 0xffd76a : 0x3a4763, both ? 0.85 : 0.6);
+        g.beginPath(); g.moveTo(cx(r), cy(r)); g.lineTo(cx(nb), cy(nb)); g.strokePath();
+      }
+    }
+    // 2) SALAS (cuadritos de color): conocidas a color, vecinas no visitadas como pista hueca
+    const COL = { stairs: 0x54e0c8, boss: 0xff5a5a, shop: 0xffd76a, pokecenter: 0xff9fb0, entrance: 0xffffff };
+    const adjacentToKnown = (r) => (this.floor.roomById.get(r.id)?.doors || []).some(d => { const nb = this.floor.roomById.get(d.to); return nb && known(nb); });
+    for (const r of rooms) {
+      const x = ox + (r.gx - minx) * s, y = oy + (r.gy - miny) * s;
+      if (known(r)) {
+        const col = r.id === this.currentRoomId ? 0xffffff : (COL[r.type] || 0x5a6a8a);
+        g.fillStyle(col, 1).fillRect(x, y, sq, sq);
+        if (r.id === this.currentRoomId) { g.lineStyle(1, 0xffd76a, 1).strokeRect(x - 1, y - 1, sq + 2, sq + 2); }
+      } else if (adjacentToKnown(r)) {
+        // pista de sala por descubrir: contorno tenue
+        g.lineStyle(1, 0x3a4763, 0.8).strokeRect(x + 1, y + 1, sq - 2, sq - 2);
+      }
     }
   }
 }

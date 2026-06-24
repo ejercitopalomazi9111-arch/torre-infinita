@@ -7,7 +7,7 @@ import { makeInput } from '../systems/input.js';
 import { sfx } from '../systems/audio.js';
 import { OWMETA } from '../../data/owmeta.generated.js';
 
-const IMG = { pokecenter: 'int_center', rest: 'int_center', shop: 'int_mart', house: 'int_center' };
+const IMG = { pokecenter: 'int_center', rest: 'int_center', shop: 'int_mart', house: 'int_house' };
 const TITLE = { pokecenter: 'CENTRO POKéMON', rest: 'POSADA', shop: 'POKé MART', house: 'CASA' };
 const CLERK = { pokecenter: 'lyra', rest: 'serena', shop: 'wattson', house: 'may' };
 // pistas/charla del vecino al entrar a una CASA decorativa (sin efecto mecánico)
@@ -58,9 +58,12 @@ export class InteriorScene extends Phaser.Scene {
     // jugador (chibi del entrenador elegido), en el felpudo de entrada
     const tr = this.registry.get('trainer');
     const pid = tr?.id || 'red';
-    this.facing = 'up';
+    this.facing = 'down';
+    this.chibi = null;
     if (OWMETA[pid] && this.textures.exists('ow_' + pid)) {
-      this.player = this.add.sprite(w / 2, this.bounds.y1, 'ow_' + pid, 1).setOrigin(0.5, 0.8).setScale(2);
+      this.player = this.add.sprite(w / 2, this.bounds.y1, 'ow_' + pid, 0).setOrigin(0.5, 0.8).setScale(2);
+      // hoja de 9 frames → animaciones de caminar reales (igual que en el piso)
+      if (OWMETA[pid].frames >= 9) { this.chibi = pid; this.ensureOwAnims(pid); }
     } else {
       this.player = this.add.image(w / 2, this.bounds.y1, this.textures.exists('trainer_' + pid) ? 'trainer_' + pid : 'trainer_red').setOrigin(0.5, 0.8);
     }
@@ -74,12 +77,24 @@ export class InteriorScene extends Phaser.Scene {
     this.cameras.main.fadeIn(220, 0, 0, 0);
   }
 
+  /** Anims del chibi GBA (9 frames) — iguales que FloorScene.ensureOwAnims. */
+  ensureOwAnims(id) {
+    const rows = { down: [3, 0, 4, 0], up: [5, 1, 6, 1], side: [7, 2, 8, 2] };
+    for (const [dir, seq] of Object.entries(rows)) {
+      const key = `ow${id}_${dir}`;
+      if (this.anims.exists(key)) continue;
+      this.anims.create({ key, frames: seq.map(f => ({ key: 'ow_' + id, frame: f })), frameRate: 9, repeat: -1 });
+    }
+  }
+  animDir(d) { return (d === 'left' || d === 'right') ? 'side' : d; }
+  // flip CORRECTO: el frame lateral del chibi mira a la IZQUIERDA → izquierda sin flip,
+  // derecha con flip (antes estaba invertido, por eso L/R se veía al revés).
+  applyFlip(dir) { this.player.setFlipX(dir === 'right'); }
+
   setFrame(dir) {
     if (!this.player.setFrame) return;
-    if (dir === 'down') this.player.setFrame(0).setFlipX(false);
-    else if (dir === 'up') this.player.setFrame(1).setFlipX(false);
-    else if (dir === 'left') this.player.setFrame(2).setFlipX(true);
-    else if (dir === 'right') this.player.setFrame(2).setFlipX(false);
+    this.applyFlip(dir);
+    this.player.setFrame(({ down: 0, up: 1, left: 2, right: 2 })[dir] ?? 0);
   }
 
   update(time, delta) {
@@ -94,7 +109,12 @@ export class InteriorScene extends Phaser.Scene {
       this.player.x = Phaser.Math.Clamp(this.player.x, this.bounds.x0, this.bounds.x1);
       this.player.y = Phaser.Math.Clamp(this.player.y, this.bounds.y0, this.bounds.y1);
       this.facing = d;
-      this.setFrame(d);
+      // ANIMACIÓN de caminar real (chibi de 9 frames); si no, frame estático
+      if (this.chibi) { this.applyFlip(d); this.player.anims.play(`ow${this.chibi}_${this.animDir(d)}`, true); }
+      else this.setFrame(d);
+    } else if (this.chibi) {
+      this.player.anims.stop();
+      this.setFrame(this.facing);   // parado: frame de reposo mirando a donde iba
     }
 
     const atCounter = this.player.y <= this.counterY + 4;

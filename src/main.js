@@ -120,6 +120,12 @@ window.__DEBUG = {
   god(on) { const r = window.__GAME.registry; if (on === undefined) on = !r.get('godtest'); r.set('godtest', on); r.set('autoplay', on); return on; },
   ai(on) { const r = window.__GAME.registry; if (on === undefined) on = !r.get('autoplay'); r.set('autoplay', on); return on; },
   speed(n) { window.__GAME.registry.set('godspeed', Math.max(1, n | 0)); return n; },
+  save() { _floor()?.dbgSave(); },
+  resetDefaults() {
+    const r = window.__GAME.registry;
+    r.set('godtest', false); r.set('autoplay', false); r.set('godspeed', 200);
+    _floor()?.dbgResetNote();
+  },
 };
 
 // --- panel HTML (se inyecta una vez) ---
@@ -150,7 +156,7 @@ function buildDebugPanel() {
     <h3>⚙ CONSOLA DEBUG</h3>
     <h4>IA / MODO DIOS</h4>
     <div class="row"><button data-act="god">★ Modo Dios IA (on/off)</button><button data-act="ai">IA juega sola</button></div>
-    <div class="row"><button data-spd="-100">Vel −</button><span id="dbg-spd" style="font-size:7px;color:#ffd76a"></span><button data-spd="100">Vel +</button></div>
+    <div class="row"><button data-spd="-100">Vel −</button><span id="dbg-spdShow" style="font-size:7px;color:#ffd76a"></span><button data-spd="100">Vel +</button></div>
     <h4>CHEATS RÁPIDOS</h4>
     <div><button data-act="heal">♥ Curar equipo</button><button data-act="lv1">+1 Nv</button><button data-act="lv10">+10 Nv</button></div>
     <div><button data-act="reveal">🗺 Revelar mapa</button><button data-act="money">+5000 ₽</button><button data-act="masterball">+5 Master Ball</button></div>
@@ -165,10 +171,12 @@ function buildDebugPanel() {
     <button data-act="give" style="width:100%;margin-top:5px">➕ DAR POKÉMON</button>
     <h4>WARP DE PISO</h4>
     <div class="row"><input id="dbg-floor" type="number" placeholder="piso 1-9111" min="1" max="9111"/><button data-act="warp">Ir</button></div>
-    <div id="dbg-hint">Tecla <b>0</b> (o Konami ↑↑↓↓←→←→ B A) para abrir/cerrar.<br>Consola: window.__DEBUG.give('mewtwo',100,{atk:999})</div>`;
+    <h4>AJUSTES</h4>
+    <div class="row"><button data-act="confirm" style="flex:1;background:#1a3a24;border-color:#58e070;color:#bff0c8">✓ Confirmar cambios</button><button data-act="resetdef" style="flex:1;background:#3a1a1a;border-color:#f08080;color:#ffc8c8">↺ Restablecer</button></div>
+    <div id="dbg-hint">Tecla <b>0</b> (o Konami ↑↑↓↓←→←→ B A) para abrir/cerrar.<br>Confirmar = guarda la partida con tus cambios · Restablecer = apaga Modo Dios/IA y velocidad a x200.<br>Consola: window.__DEBUG.give('mewtwo',100,{atk:999})</div>`;
   document.body.appendChild(p);
   const num = (id) => { const v = document.getElementById(id).value.trim(); return v === '' ? null : (parseInt(v, 10) || 0); };
-  const refreshSpd = () => { const e = document.getElementById('dbg-spd'); if (e) e.textContent = 'x' + (window.__GAME.registry.get('godspeed') || 200); };
+  const refreshSpd = () => { const e = document.getElementById('dbg-spdShow'); if (e) e.textContent = 'x' + (window.__GAME.registry.get('godspeed') || 200); };
   p.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-act],[data-spd]'); if (!b) return;
     if (b.dataset.spd) { window.__DEBUG.speed((window.__GAME.registry.get('godspeed') || 200) + (+b.dataset.spd)); return refreshSpd(); }
@@ -182,6 +190,8 @@ function buildDebugPanel() {
     else if (a === 'money') window.__DEBUG.money(5000);
     else if (a === 'masterball') window.__DEBUG.item('masterball', 5);
     else if (a === 'warp') { const f = num('dbg-floor'); if (f) window.__DEBUG.warp(f); }
+    else if (a === 'confirm') { window.__DEBUG.save(); }
+    else if (a === 'resetdef') { window.__DEBUG.resetDefaults(); refreshSpd(); }
     else if (a === 'give') {
       const stats = {}; for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) { const v = num('dbg-' + k); if (v != null) stats[k] = v; }
       window.__DEBUG.give(document.getElementById('dbg-name').value, num('dbg-lvl') || 50, Object.keys(stats).length ? stats : null);
