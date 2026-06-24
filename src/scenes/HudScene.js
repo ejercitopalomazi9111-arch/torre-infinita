@@ -56,75 +56,82 @@ export class HudScene extends Phaser.Scene {
       up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT,
       w: K.W, a: K.A, s: K.S, d: K.D,
       enter: K.ENTER, z: K.Z, space: K.SPACE, x: K.X, back: K.BACKSPACE,
+      q: K.Q, e: K.E, shift: K.SHIFT, m: K.M, tk: K.T, p: K.P,   // L/R/Select + atajos del mando
     }, false);   // capture=false: no robar las teclas a las escenas de juego
   }
 
   buildArcade(H) {
     const M = this.M, RX = this.RX;
     const cx = RX + M / 2;
+    // LAYOUT VERTICAL espaciado (sin solapes): atajos · L/R · joystick · A/B ·
+    // Start/Select · palanca. Cada botón se REGISTRA para iluminarse al pulsarlo.
+    const TAGY = 44, LRY = 80, JY = 132, ABY = 190, PILLY = 248, LEVERY = 320;
+    this.cabBtns = [];   // {obj, base, lit, pressed()}  → animación en update()
+    const k = () => this.keys, pad = () => this.input.gamepad?.pad1;
+    const reg = (obj, base, lit, pressed) => { this.cabBtns.push({ obj, base, lit, pressed }); return obj; };
+
+    // atajos directos arriba: 🎒 mochila (M) · 👥 equipo (T) · ▦ dex (P)
+    const tag = (x, label, code, key, keyName, emoji) => {
+      const r = this.add.circle(x, TAGY, 10, 0x1a1a26).setStrokeStyle(2, GOLD, 0.7).setDepth(4);
+      this.add.text(x, TAGY, label, { fontFamily: 'system-ui,sans-serif', fontSize: emoji ? '10px' : '7px', color: '#ffd76a' }).setOrigin(0.5).setDepth(5);
+      this.bindButton(r, code, key);
+      reg(r, 0x1a1a26, 0x5a4a1a, () => k()[keyName]?.isDown);
+    };
+    tag(cx - 22, '🎒', 77, 'm', 'm', true);
+    tag(cx, '👥', 84, 't', 'tk', true);
+    tag(cx + 22, '▦', 80, 'p', 'p', true);
+
+    // gatillos L / R
+    this.btnL = this.add.circle(cx - 22, LRY, 10, 0x2a3a5a).setStrokeStyle(2, CYAN, 0.8).setDepth(4);
+    this.add.text(cx - 22, LRY, 'L', { fontFamily: FONT, fontSize: '6px', color: '#bfe0ff' }).setOrigin(0.5).setDepth(5);
+    this.btnR = this.add.circle(cx + 22, LRY, 10, 0x2a3a5a).setStrokeStyle(2, CYAN, 0.8).setDepth(4);
+    this.add.text(cx + 22, LRY, 'R', { fontFamily: FONT, fontSize: '6px', color: '#bfe0ff' }).setOrigin(0.5).setDepth(5);
+    this.bindButton(this.btnL, 81, 'q'); this.bindButton(this.btnR, 69, 'e');
+    reg(this.btnL, 0x2a3a5a, 0x54e0c8, () => k().q.isDown || pad()?.buttons?.[4]?.pressed);
+    reg(this.btnR, 0x2a3a5a, 0x54e0c8, () => k().e.isDown || pad()?.buttons?.[5]?.pressed);
+
     // joystick: base + bola
-    this.add.circle(cx, 150, 24, 0x05060a).setStrokeStyle(3, GOLD, 0.9).setDepth(2);
-    this.add.circle(cx, 150, 24).setStrokeStyle(1, CYAN, 0.4).setDepth(2);
-    this.stickBase = { x: cx, y: 150 };
-    this.stick = this.add.circle(cx, 150, 11, CYAN).setStrokeStyle(2, 0xffffff, 0.8).setDepth(4);
-    this.stickShaft = this.add.line(0, 0, cx, 150, cx, 150, 0xffffff, 0.5).setLineWidth(2).setDepth(3);
+    this.add.circle(cx, JY, 24, 0x05060a).setStrokeStyle(3, GOLD, 0.9).setDepth(2);
+    this.add.circle(cx, JY, 24).setStrokeStyle(1, CYAN, 0.4).setDepth(2);
+    this.stickBase = { x: cx, y: JY };
+    this.stick = this.add.circle(cx, JY, 11, CYAN).setStrokeStyle(2, 0xffffff, 0.8).setDepth(4);
+    this.stickShaft = this.add.line(0, 0, cx, JY, cx, JY, 0xffffff, 0.5).setLineWidth(2).setDepth(3);
 
-    // botones A / B (se iluminan al pulsar). CLICABLES con el mouse: cada uno
-    // despacha el evento de teclado real → la escena activa lo procesa igual.
-    this.btnA = this.add.circle(cx - 12, 232, 11, 0x2a5a3a).setStrokeStyle(2, 0x58e070).setDepth(4);
-    this.add.text(cx - 12, 232, 'A', { fontFamily: FONT, fontSize: '7px', color: '#bff0c8' }).setOrigin(0.5).setDepth(5);
-    this.btnB = this.add.circle(cx + 12, 252, 11, 0x5a2a2a).setStrokeStyle(2, 0xf06060).setDepth(4);
-    this.add.text(cx + 12, 252, 'B', { fontFamily: FONT, fontSize: '7px', color: '#ffc8c8' }).setOrigin(0.5).setDepth(5);
-    this.btnABase = 0x2a5a3a; this.btnBBase = 0x5a2a2a;
-    this.bindButton(this.btnA, 90, 'z');             // A = la tecla A REAL (Z): interactuar/confirmar
-    this.bindButton(this.btnB, 88, 'x');             // B = atrás/cancelar (X)
+    // botones A / B (en diagonal, estilo Game Boy)
+    this.btnA = this.add.circle(cx - 13, ABY, 12, 0x2a5a3a).setStrokeStyle(2, 0x58e070).setDepth(4);
+    this.add.text(cx - 13, ABY, 'A', { fontFamily: FONT, fontSize: '8px', color: '#bff0c8' }).setOrigin(0.5).setDepth(5);
+    this.btnB = this.add.circle(cx + 13, ABY + 20, 12, 0x5a2a2a).setStrokeStyle(2, 0xf06060).setDepth(4);
+    this.add.text(cx + 13, ABY + 20, 'B', { fontFamily: FONT, fontSize: '8px', color: '#ffc8c8' }).setOrigin(0.5).setDepth(5);
+    this.bindButton(this.btnA, 90, 'z'); this.bindButton(this.btnB, 88, 'x');
+    reg(this.btnA, 0x2a5a3a, 0x58e070, () => k().z.isDown || k().space.isDown || pad()?.A);
+    reg(this.btnB, 0x5a2a2a, 0xf06060, () => k().x.isDown || k().back.isDown || pad()?.B);
 
-    // ----- botones que FALTABAN en el mando (Carlos): Start, Select, L, R + atajos -----
-    // gatillos L/R arriba de la cabina
-    this.btnL = this.add.circle(cx - 16, 100, 9, 0x2a3a5a).setStrokeStyle(2, CYAN, 0.8).setDepth(4);
-    this.add.text(cx - 16, 100, 'L', { fontFamily: FONT, fontSize: '6px', color: '#bfe0ff' }).setOrigin(0.5).setDepth(5);
-    this.btnR = this.add.circle(cx + 16, 100, 9, 0x2a3a5a).setStrokeStyle(2, CYAN, 0.8).setDepth(4);
-    this.add.text(cx + 16, 100, 'R', { fontFamily: FONT, fontSize: '6px', color: '#bfe0ff' }).setOrigin(0.5).setDepth(5);
-    this.bindButton(this.btnL, 81, 'q');             // L = Q (bici)
-    this.bindButton(this.btnR, 69, 'e');             // R = E (IA)
-    // Start (Enter) y Select (Shift) como pastillas pequeñas
-    const pill = (x, y, label, code, key, col) => {
-      const w = 30, h = 13;
-      const r = this.add.rectangle(x, y, w, h, 0x14141f).setStrokeStyle(2, col, 0.9).setDepth(4);
-      this.add.text(x, y, label, { fontFamily: FONT, fontSize: '5px', color: '#e8f6ff' }).setOrigin(0.5).setDepth(5);
-      this.bindButton(r, code, key);
+    // Start (Enter) y Select (Shift) como pastillas — bien separadas de la palanca
+    const pill = (x, label, code, key, col, base, lit, pressed) => {
+      const r = this.add.rectangle(x, PILLY, 34, 14, base).setStrokeStyle(2, col, 0.9).setDepth(4);
+      this.add.text(x, PILLY, label, { fontFamily: FONT, fontSize: '5px', color: '#e8f6ff' }).setOrigin(0.5).setDepth(5);
+      this.bindButton(r, code, key); reg(r, base, lit, pressed);
       return r;
     };
-    this.btnStart = pill(cx - 18, 272, 'START', 13, 'Enter', GOLD);
-    this.btnSelect = pill(cx + 18, 272, 'SELECT', 16, 'Shift', CYAN);
-    // atajos directos: 🎒 mochila (M) · 👥 equipo (T) · ▦ dex (P)
-    const tag = (x, y, label, code, key) => {
-      const r = this.add.circle(x, y, 9, 0x1a1a26).setStrokeStyle(2, GOLD, 0.7).setDepth(4).setInteractive({ useHandCursor: true });
-      this.add.text(x, y, label, { fontFamily: 'system-ui,sans-serif', fontSize: '9px', color: '#ffd76a' }).setOrigin(0.5).setDepth(5);
-      this.bindButton(r, code, key);
-      return r;
-    };
-    tag(cx - 18, 56, '🎒', 77, 'm');
-    tag(cx, 56, '👥', 84, 't');
-    tag(cx + 18, 56, '▦', 80, 'p');
+    this.btnStart = pill(cx - 20, 'START', 13, 'Enter', GOLD, 0x2a2410, 0x5a4a1a, () => k().enter.isDown || pad()?.buttons?.[9]?.pressed);
+    this.btnSelect = pill(cx + 20, 'SELECT', 16, 'Shift', CYAN, 0x10242a, 0x1a4a52, () => k().shift.isDown || pad()?.buttons?.[8]?.pressed);
 
-    // palanca arcade: base + mástil con bola que pivota desde abajo (se inclina
-    // con el eje X). Antes era un rectángulo fino que se veía "roto".
-    const leverY = 308;
+    // palanca arcade: base + mástil con bola que pivota desde abajo (eje X).
+    const leverY = LEVERY;
     this.add.ellipse(cx, leverY + 1, 24, 10, 0x14141f).setStrokeStyle(2, GOLD, 0.9).setDepth(2);  // mont./base
     this.lever = this.add.container(cx, leverY).setDepth(3);
-    const shaft = this.add.rectangle(0, 0, 6, 30, 0xc89a3a).setOrigin(0.5, 1).setStrokeStyle(1, 0x6a4f18);
-    const knob = this.add.circle(0, -30, 9, 0xf04040).setStrokeStyle(2, 0xffffff, 0.85);   // bola roja
-    const shine = this.add.circle(-3, -33, 3, 0xffffff, 0.6);
+    const shaft = this.add.rectangle(0, 0, 6, 28, 0xc89a3a).setOrigin(0.5, 1).setStrokeStyle(1, 0x6a4f18);
+    const knob = this.add.circle(0, -28, 9, 0xf04040).setStrokeStyle(2, 0xffffff, 0.85);   // bola roja
+    const shine = this.add.circle(-3, -31, 3, 0xffffff, 0.6);
     this.lever.add([shaft, knob, shine]);
     this.leverKnob = knob; this.leverShine = shine; this.leverBaseY = leverY;
 
     // JOYSTICK clicable: zona invisible sobre la base; arrastrar/clic en una
     // dirección manda la flecha correspondiente a la escena activa.
     this.mouseDir = null;
-    const zone = this.add.circle(cx, 150, 26, 0xffffff, 0.001).setDepth(5).setInteractive({ useHandCursor: true });
+    const zone = this.add.circle(cx, JY, 26, 0xffffff, 0.001).setDepth(5).setInteractive({ useHandCursor: true });
     const dirFrom = (p) => {
-      const ox = p.x - cx, oy = p.y - 150;
+      const ox = p.x - cx, oy = p.y - JY;
       if (Math.hypot(ox, oy) < 5) return null;
       return Math.abs(ox) > Math.abs(oy)
         ? (ox < 0 ? [37, 'ArrowLeft'] : [39, 'ArrowRight'])
@@ -255,10 +262,11 @@ export class HudScene extends Phaser.Scene {
     }
     this.lever.y += ((this.leverBaseY + ny * 3) - this.lever.y) * 0.3;
 
-    // botones: A = confirmar, B = atrás/cancelar
-    const aDown = k.enter.isDown || k.z.isDown || k.space.isDown || pad?.A || pad?.buttons?.[0]?.pressed;
-    const bDown = k.x.isDown || k.back.isDown || pad?.B || pad?.buttons?.[1]?.pressed;
-    this.btnA.setFillStyle(aDown ? 0x58e070 : this.btnABase).setScale(aDown ? 0.86 : 1);
-    this.btnB.setFillStyle(bDown ? 0xf06060 : this.btnBBase).setScale(bDown ? 0.86 : 1);
+    // TODOS los botones del mando se iluminan y se hunden al pulsarlos (teclado,
+    // clic o gamepad) — antes solo A/B reaccionaban.
+    for (const btn of (this.cabBtns || [])) {
+      let on = false; try { on = !!btn.pressed(); } catch { on = false; }
+      btn.obj.setFillStyle(on ? btn.lit : btn.base).setScale(on ? 0.86 : 1);
+    }
   }
 }
