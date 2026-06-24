@@ -5,7 +5,7 @@ import { VIEW, frameCamera } from '../main.js';
 import { SPECIES } from '../../data/species.generated.js';
 import { makeInput } from '../systems/input.js';
 import { hasSave, loadRun, hasPlayed } from '../systems/state.js';
-import { playBgm } from '../systems/audio.js';
+import { playBgm, sfx } from '../systems/audio.js';
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -97,6 +97,7 @@ export class TitleScene extends Phaser.Scene {
     this.went = false;
     this.go = (target = 'Intro', data = {}) => {
       if (this.went) return; this.went = true;
+      sfx(this, 'select');
       this.cameras.main.fadeOut(350, 0, 0, 0);
       this.time.delayedCall(360, () => this.scene.start(target, data));
     };

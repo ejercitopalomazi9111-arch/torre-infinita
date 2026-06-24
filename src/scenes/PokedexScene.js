@@ -9,6 +9,7 @@ import { listRecordings, clearRecordings } from '../systems/combat/recorder.js';
 import { makeMoveset } from '../systems/combat/movepool.js';
 import { MOVES } from '../../data/moves.js';
 import { makeInput } from '../systems/input.js';
+import { sfx } from '../systems/audio.js';
 
 const COLS = 8, CELL = 52, SPRITE = 34, TOP = 56;
 const RESULT = { win: 'Victoria', lose: 'Derrota', caught: 'Capturado', fled: 'Huida' };
@@ -201,10 +202,10 @@ export class PokedexScene extends Phaser.Scene {
   update() {
     if (!this.gba) return;
     // pestañas: Q / E / L1 / R1
-    if (this.gba.justDown('L')) return this.setMode('dex');
-    if (this.gba.justDown('R')) return this.setMode('rec');
+    if (this.gba.justDown('L')) { sfx(this, 'cursor'); return this.setMode('dex'); }
+    if (this.gba.justDown('R')) { sfx(this, 'cursor'); return this.setMode('rec'); }
     const d = this.gba.dirJust();
-    if (d && !this.detail) this.applyMove(d);
+    if (d && !this.detail) { sfx(this, 'cursor'); this.applyMove(d); }
     // MANTENER PULSADO = scroll rápido (Pokédex y repeticiones tienen muchas entradas)
     const held = this.gba.dirHeld?.();
     if (held && !this.detail) {
@@ -216,10 +217,12 @@ export class PokedexScene extends Phaser.Scene {
       }
     } else { this._holdDir = null; this._holdT = 0; this._holdR = 0; }
     if (this.gba.confirm()) {
+      sfx(this, 'select');
       if (this.detail) { this.detail.destroy(true); this.detail = null; }
       else if (this.mode === 'rec') this.playSelected();
       else this.openSelected();
     } else if (this.gba.cancel()) {
+      sfx(this, 'back');
       if (this.detail) { this.detail.destroy(true); this.detail = null; }
       else { this.scene.stop(); this.scene.resume(this.returnTo); }
     }

@@ -18,6 +18,7 @@ const T = 32;                 // tamaño de tile en pantalla (igual que FloorSce
 const AW = 28, AH = 18;       // arena en tiles (ancho × alto) → mundo 896×576
 const COLORS = [0xffd76a, 0x54e0c8, 0xff7ad0, 0x8aff6a];   // P1 oro · P2 cian · P3 rosa · P4 verde
 const PNAME = ['P1', 'P2', 'P3', 'P4'];
+const GOAL_DEPTH = 5;         // co-op = CARRERA de capturas a través de 5 niveles; gana quien más cace
 
 export class CoopScene extends Phaser.Scene {
   constructor() { super('Coop'); }
@@ -179,17 +180,26 @@ export class CoopScene extends Phaser.Scene {
 
   refreshHud() {
     const parts = this.players.map(p => `${PNAME[p.idx]}:${p.catches}`);
-    this.hudTxt.setText(`NIVEL ${this.depth}   capturas ${this.catches}   ${parts.join('  ')}   (todos al portal ↓)`);
+    this.hudTxt.setText(`NIVEL ${this.depth}/${GOAL_DEPTH}   ${parts.join('  ')}   ¡carrera de capturas! · todos al portal ↓`);
   }
 
   update(time, delta) {
+    if (this.finished) {   // pantalla de resultados: Start/A de cualquiera vuelve al menú
+      if (this.players.some(p => p.input.justDown('START') || p.input.justDown('A'))) { sfx(this, 'select'); this.scene.start('MainMenu'); }
+      return;
+    }
     if (this.transitioning) return;
     for (const pl of this.players) this.movePlayer(pl, delta);
     this.wanderRoamers(delta);
+    // feedback de "LISTO" cuando un jugador está sobre el portal esperando a los demás
+    for (const pl of this.players) {
+      const onP = pl.c === this.portal.c && pl.r === this.portal.r;
+      if (onP !== pl.onPortal) { pl.onPortal = onP; pl.ring.setStrokeStyle(onP ? 3 : 2, onP ? 0x7ad0ff : pl.color, onP ? 1 : 0.9); if (onP) sfx(this, 'cursor', 0.4); }
+    }
     // ¿todos los jugadores sobre el portal? → bajar
-    if (this.players.every(p => p.c === this.portal.c && p.r === this.portal.r)) this.descend();
+    if (this.players.every(p => p.onPortal)) this.descend();
     // salir al menú con START de cualquier jugador
-    if (this.players.some(p => p.input.justDown('START'))) { this.scene.start('MainMenu'); }
+    if (this.players.some(p => p.input.justDown('START'))) { sfx(this, 'back'); this.scene.start('MainMenu'); }
   }
 
   movePlayer(pl, delta) {
@@ -212,21 +222,36 @@ export class CoopScene extends Phaser.Scene {
   }
 
   afterStep(pl) {
-    // ¿pisó un Pokémon? → captura (contador compartido)
+    // ¿pisó un Pokémon? → CAPTURA con pokéball (contador compartido)
     const ri = this.roamers.findIndex(m => m.c === pl.c && m.r === pl.r);
     if (ri >= 0) {
       const m = this.roamers[ri]; this.roamers.splice(ri, 1);
-      this.tweens.add({ targets: m.sprite, y: m.sprite.y - 16, alpha: 0, scale: 0.1, duration: 260, onComplete: () => m.sprite.destroy() });
-      pl.catches++; this.catches++; sfx(this, 'levelup', 0.5); this.refreshHud();
-      this.popup(pl, `¡${m.sp.name.toUpperCase()}!`);
+      this.catchAnim(pl, m);
+      pl.catches++; this.catches++; this.refreshHud();
     }
     // ¿objeto? → recoger
     const ii = this.items.findIndex(it => it.c === pl.c && it.r === pl.r);
     if (ii >= 0) {
       const it = this.items[ii]; this.items.splice(ii, 1);
       this.tweens.add({ targets: it.sprite, y: it.sprite.y - 14, alpha: 0, duration: 250, onComplete: () => it.sprite.destroy() });
-      sfx(this, 'select', 0.5); this.popup(pl, '+objeto');
+      sfx(this, 'coin', 0.5); this.popup(pl, '+objeto');
     }
+  }
+
+  /** Animación de captura: el jugador lanza una pokébola al Pokémon, clic y se va. */
+  catchAnim(pl, m) {
+    sfx(this, 'ballthrow', 0.5);
+    const ball = this.add.image(pl.sprite.x, pl.sprite.y - 8, this.textures.exists('item_pokeball') ? 'item_pokeball' : 'pokeball').setScale(0.8).setDepth(95000);
+    this.world.add(ball); this.uiCam?.ignore(ball);
+    this.tweens.add({ targets: ball, x: m.sprite.x, y: m.sprite.y, angle: 540, duration: 220, ease: 'Quad.out', onComplete: () => {
+      sfx(this, 'ballopen', 0.5);
+      this.tweens.add({ targets: m.sprite, scale: 0.1, alpha: 0, duration: 200, onComplete: () => m.sprite.destroy() });
+      this.tweens.add({ targets: ball, y: ball.y + 8, duration: 160, yoyo: true, repeat: 1, ease: 'Sine.inOut', onComplete: () => {
+        sfx(this, 'ballclick', 0.6);
+        this.tweens.add({ targets: ball, alpha: 0, scale: 0.3, duration: 160, onComplete: () => ball.destroy() });
+      } });
+    } });
+    this.popup(pl, `¡${m.sp.name.toUpperCase()}!`);
   }
 
   popup(pl, txt) {
@@ -238,20 +263,60 @@ export class CoopScene extends Phaser.Scene {
   wanderRoamers(delta) {
     for (const m of this.roamers) {
       m.moveT += delta;
-      if (m.moveT < 700) continue; m.moveT = 0;
-      if (Math.random() < 0.5) continue;
-      const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][Math.random() * 4 | 0];
-      if (!this.walkable(m.c + dx, m.r + dy)) continue;
+      if (m.moveT < 520) continue; m.moveT = 0;
+      // ¿hay un jugador CERCA (≤3 casillas)? → HUYE en dirección contraria (reto de caza)
+      let near = null, best = 99;
+      for (const pl of this.players) { const dist = Math.abs(pl.c - m.c) + Math.abs(pl.r - m.r); if (dist <= 3 && dist < best) { best = dist; near = pl; } }
+      let opts;
+      if (near) {
+        const fx = Math.sign(m.c - near.c), fy = Math.sign(m.r - near.r);   // alejarse
+        opts = [[fx, 0], [0, fy], [fx, fy]].filter(([a, b]) => a || b);
+      } else {
+        if (Math.random() < 0.45) continue;   // deambular relajado
+        opts = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+      }
+      const [dx, dy] = opts[Math.random() * opts.length | 0] || [0, 0];
+      if ((!dx && !dy) || !this.walkable(m.c + dx, m.r + dy)) continue;
       if (this.roamers.some(o => o !== m && o.c === m.c + dx && o.r === m.r + dy)) continue;
       m.c += dx; m.r += dy; const p = this.tile(m.c, m.r);
-      this.tweens.add({ targets: m.sprite, x: p.x, y: p.y, duration: 320, ease: 'Linear' });
+      this.tweens.add({ targets: m.sprite, x: p.x, y: p.y, duration: near ? 200 : 320, ease: 'Linear' });
       m.sprite.setDepth(50 + p.y);
     }
   }
 
   descend() {
     this.transitioning = true;
+    sfx(this, 'save', 0.6);
+    // ¿llegaron a la META? → pantalla de resultados (fin de la carrera)
+    if (this.depth >= GOAL_DEPTH) { this.time.delayedCall(200, () => this.finale()); return; }
+    this.pcams.forEach(c => c.flash(200, 120, 200, 255));
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.time.delayedCall(320, () => this.scene.restart({ players: this.numPlayers, depth: this.depth + 1, seed: this.seed, catches: this.catches }));
+  }
+
+  /** Fin de la carrera co-op: tabla de posiciones por capturas + ganador. El banner
+   *  vive en el contenedor HUD (lo pinta SOLO la uiCam, las de juego lo ignoran). */
+  finale() {
+    this.finished = true;
+    sfx(this, 'levelup');
+    const W = CANVAS.w, H = CANVAS.h;
+    const rank = this.players.slice().sort((a, b) => b.catches - a.catches);
+    const topScore = rank[0].catches;
+    const winners = rank.filter(p => p.catches === topScore);
+    const ttl = winners.length > 1 ? '¡EMPATE!' : `¡GANA ${PNAME[winners[0].idx]}!`;
+    this.hud.add(this.add.rectangle(0, 0, W, H, 0x05060a, 0.92).setOrigin(0, 0).setDepth(150000));
+    this.hud.add(this.add.text(W / 2, 40, '🏆 FIN DE LA CARRERA', { fontFamily: '"Press Start 2P"', fontSize: '14px', color: '#ffd76a' }).setOrigin(0.5).setDepth(150001));
+    this.hud.add(this.add.text(W / 2, 70, ttl, { fontFamily: '"Press Start 2P"', fontSize: '11px', color: '#7ad0ff' }).setOrigin(0.5).setDepth(150001));
+    rank.forEach((p, i) => {
+      const y = 110 + i * 26;
+      const medal = ['🥇', '🥈', '🥉', '4º'][i] || '';
+      const col = '#' + p.color.toString(16).padStart(6, '0');
+      this.hud.add(this.add.text(W / 2, y, `${medal}  ${PNAME[p.idx]}   ${p.catches} capturas`, { fontFamily: '"Press Start 2P"', fontSize: '10px', color: i === 0 ? '#ffd76a' : col }).setOrigin(0.5).setDepth(150001));
+    });
+    this.hud.add(this.add.text(W / 2, H - 30, `Total del equipo: ${this.catches} Pokémon en ${GOAL_DEPTH} niveles`, { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#9fb0d0' }).setOrigin(0.5).setDepth(150001));
+    const prompt = this.add.text(W / 2, H - 14, 'Start / A: volver al menú', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffd76a' }).setOrigin(0.5).setDepth(150001);
+    this.hud.add(prompt);
+    this.tweens.add({ targets: prompt, alpha: 0.3, duration: 700, yoyo: true, repeat: -1 });
+    this.cameras.main.flash(400, 255, 226, 120);
   }
 }

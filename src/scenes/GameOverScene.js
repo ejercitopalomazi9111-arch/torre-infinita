@@ -3,6 +3,7 @@
 import Phaser from 'phaser';
 import { VIEW, frameCamera } from '../main.js';
 import { makeInput } from '../systems/input.js';
+import { sfx } from '../systems/audio.js';
 import { clearSave, addMeta, diffOf } from '../systems/state.js';
 
 const LINES = [
@@ -26,6 +27,7 @@ export class GameOverScene extends Phaser.Scene {
     const ball = this.add.image(cx, cy, 'item_pokeball').setScale(3);
     this.tweens.add({ targets: ball, x: cx + 4, duration: 70, yoyo: true, repeat: 5 });   // tiembla
     this.time.delayedCall(560, () => {
+      sfx(this, 'faint');   // la pokébola se quiebra
       this.cameras.main.flash(120, 255, 80, 80);
       this.cameras.main.shake(200, 0.012);
       const src = this.textures.get('item_pokeball').getSourceImage();
@@ -71,6 +73,7 @@ export class GameOverScene extends Phaser.Scene {
   update() {
     if (this.ready && this.gba.confirm()) {
       this.ready = false;
+      sfx(this, 'select');
       this.registry.remove('run');           // nueva partida (roguelike)
       clearSave();                           // la derrota borra la partida guardada
       this.cameras.main.fadeOut(400, 0, 0, 0);
