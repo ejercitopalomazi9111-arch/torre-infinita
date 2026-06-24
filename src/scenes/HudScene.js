@@ -241,19 +241,19 @@ export class HudScene extends Phaser.Scene {
     // tirada hacia ti/más corta y baja). Antes solo se movía a los lados.
     const leverTarget = (dx / len) * 0.5;
     this.lever.rotation += (leverTarget - this.lever.rotation) * 0.3;
-    // PERSPECTIVA 3D en el eje Y: ARRIBA = la palanca se va hacia adelante-arriba
-    // (mástil más largo) y la bola se ve más PEQUEÑA (lejos). ABAJO = la bola se ve
-    // más GRANDE (cerca, hacia ti) y el mástil se acorta inclinándose.
+    // PERSPECTIVA 3D en el eje Y: ABAJO = tiras la palanca HACIA TI → la bola roja
+    // se ve más GRANDE (se acerca) y un poco más abajo. ARRIBA = la empujas lejos →
+    // la bola se ve más PEQUEÑA y más arriba. (El mástil se mantiene natural para
+    // que la bola escale limpio y no se deforme; antes el scaleY peleaba con la bola.)
     const ny = Math.abs(dy) > 0.05 ? dy / len : 0;          // -1 arriba … +1 abajo
-    const shaftSY = 1 - ny * 0.35;                           // arriba alarga, abajo acorta
-    this.lever.scaleY += (shaftSY - this.lever.scaleY) * 0.3;
-    const knobScale = 1 - ny * 0.55;                         // arriba pequeña, abajo grande
+    this.lever.scaleY += (1 - this.lever.scaleY) * 0.3;     // mástil a escala natural
+    const knobScale = 1 + ny * 0.5;                          // ABAJO grande · ARRIBA pequeña
     if (this.leverKnob) {
       this.leverKnob.scale += (knobScale - this.leverKnob.scale) * 0.3;
-      this.leverKnob.y += ((-30 - ny * 4) - this.leverKnob.y) * 0.3;   // arriba sube más
+      this.leverKnob.y += ((-30 + ny * 5) - this.leverKnob.y) * 0.3;   // abajo baja (hacia ti), arriba sube
       if (this.leverShine) { this.leverShine.scale = this.leverKnob.scale; this.leverShine.y = this.leverKnob.y - 3; }
     }
-    this.lever.y += ((this.leverBaseY + ny * 4) - this.lever.y) * 0.3;
+    this.lever.y += ((this.leverBaseY + ny * 3) - this.lever.y) * 0.3;
 
     // botones: A = confirmar, B = atrás/cancelar
     const aDown = k.enter.isDown || k.z.isDown || k.space.isDown || pad?.A || pad?.buttons?.[0]?.pressed;
